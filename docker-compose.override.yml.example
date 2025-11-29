@@ -1,0 +1,13 @@
+# Пример файла для переопределения настроек docker-compose
+# Скопируйте этот файл в docker-compose.override.yml и настройте под свои нужды
+
+version: '3.8'
+
+services:
+  app:
+    environment:
+      # Переопределите настройки здесь
+      # DATABASE_URL: postgresql://user:pass@postgres:5432/db
+      # BOT_TOKEN: your_token
+      # BOT_SECRET: your_secret
+
