@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     # Настройки для PostgreSQL (для docker-compose)
-    postgres_user: str = "postgres"
-    postgres_password: str = "postgres"
-    postgres_db: str = "telegram_app_db"
+    postgres_user: str = "your_postgres_user"
+    postgres_password: str = "your_postgres_password"
+    postgres_db: str = "your_database_name"
     # Домены для CORS и Mini App
     frontend_domain: str = "https://your-frontend-domain.com"  # Домен фронтенда (Mini App)
     api_domain: str = ""  # Домен API (опционально, для CORS)
