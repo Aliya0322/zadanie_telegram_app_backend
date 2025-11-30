@@ -15,21 +15,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-class UpdateRoleRequest(BaseModel):
-    role: UserRole
-    first_name: Optional[str] = Field(None, alias="firstName")
-    last_name: Optional[str] = Field(None, alias="lastName")
-    middle_name: Optional[str] = Field(None, alias="middleName")
-    patronymic: Optional[str] = None  # Для совместимости с фронтендом (middleName -> patronymic)
-    birth_date: Optional[datetime] = Field(None, alias="birthDate")
-    birthdate: Optional[datetime] = None  # Для совместимости с фронтендом
-    timezone: Optional[str] = None
-    
-    model_config = ConfigDict(populate_by_name=True)  # Позволяет использовать как alias, так и имя поля
-
-
 class LoginRequest(BaseModel):
     """Модель для запроса логина (initData передается в заголовке)"""
+    role: Optional[UserRole] = None  # Опциональная роль (teacher/student)
     first_name: Optional[str] = Field(None, alias="firstName")
     last_name: Optional[str] = Field(None, alias="lastName")
     middle_name: Optional[str] = Field(None, alias="middleName")
@@ -54,7 +42,11 @@ async def login(
     Бэкенд верифицирует, и если пользователя нет в БД, создает новую запись
     с ролью student (по умолчанию) и возвращает статус.
     
-    Можно передать данные анкеты (first_name, last_name, patronymic/middle_name, birthdate, timezone) в теле запроса.
+    Можно передать:
+    - role (teacher/student) - для установки роли
+    - Данные анкеты (first_name, last_name, patronymic/middle_name, birthdate, timezone) в теле запроса.
+    
+    Если роль передана, она будет установлена. Если данные профиля переданы, они будут сохранены.
     """
     # Проверяем initData
     telegram_data = verify_telegram_init_data(x_telegram_init_data)
@@ -65,7 +57,6 @@ async def login(
         )
     
     user_id = telegram_data['user_id']
-    user_data = telegram_data.get('user_data', {})
     
     # Ищем пользователя в БД
     user = db.query(User).filter(User.tg_id == user_id).first()
@@ -74,17 +65,17 @@ async def login(
     # Если пользователя нет, создаем его
     if not user:
         try:
+            # Определяем роль (если передана, иначе student по умолчанию)
+            role_value = login_data.role if login_data and login_data.role else UserRole.STUDENT
+            
             # Определяем часовой пояс
             timezone_value = "UTC"
             if login_data and login_data.timezone:
                 timezone_value = login_data.timezone
-            elif login_data is None:
-                # Если login_data не передан, используем UTC
-                timezone_value = "UTC"
             
             user = User(
                 tg_id=user_id,
-                role=UserRole.STUDENT,
+                role=role_value,
                 timezone=timezone_value,
                 is_active=True
             )
@@ -108,7 +99,7 @@ async def login(
             db.commit()
             db.refresh(user)
             is_new_user = True
-            logger.info(f"New user registered with tg_id: {user_id}")
+            logger.info(f"New user registered with tg_id: {user_id}, role: {role_value.value}")
         except Exception as e:
             db.rollback()
             logger.error(f"Error creating user: {e}")
@@ -117,9 +108,17 @@ async def login(
                 detail="Failed to create user account"
             )
     else:
-        # Если пользователь уже существует, обновляем данные анкеты, если они переданы
+        # Если пользователь уже существует, обновляем данные, если они переданы
+        updated = False
+        
+        # Обновляем роль, если передана
+        if login_data and login_data.role:
+            user.role = login_data.role
+            updated = True
+            logger.info(f"User {user_id} role updated to {login_data.role.value}")
+        
+        # Обновляем данные анкеты, если они переданы
         if login_data:
-            updated = False
             if login_data.first_name:
                 user.first_name = login_data.first_name
                 updated = True
@@ -146,11 +145,11 @@ async def login(
                     logger.info(f"User {user_id} timezone updated to {login_data.timezone}")
                 except pytz.exceptions.UnknownTimeZoneError:
                     logger.warning(f"Invalid timezone '{login_data.timezone}' provided, keeping existing timezone")
-            
-            if updated:
-                db.commit()
-                db.refresh(user)
-                logger.info(f"User {user_id} profile updated during login")
+        
+        if updated:
+            db.commit()
+            db.refresh(user)
+            logger.info(f"User {user_id} profile updated during login")
     
     if not user.is_active:
         raise HTTPException(
@@ -169,53 +168,6 @@ async def login(
 async def get_me(current_user: User = Depends(get_current_user)):
     """Получить информацию о текущем пользователе."""
     return current_user
-
-
-@router.post("/update-role")
-async def update_role(
-    role_data: UpdateRoleRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Обновить роль пользователя и данные анкеты (для регистрации как учитель/ученик).
-    
-    Принимает роль и опционально данные анкеты (first_name, last_name, patronymic/middle_name, birthdate, timezone).
-    """
-    # Обновляем роль
-    current_user.role = role_data.role
-    
-    # Обновляем данные анкеты, если они переданы
-    if role_data.first_name:
-        current_user.first_name = role_data.first_name
-    if role_data.last_name:
-        current_user.last_name = role_data.last_name
-    # Поддерживаем оба варианта: patronymic и middle_name
-    patronymic_value = role_data.patronymic or role_data.middle_name
-    if patronymic_value:
-        current_user.patronymic = patronymic_value
-    # Поддерживаем оба варианта: birthdate и birth_date
-    birthdate_value = role_data.birthdate or role_data.birth_date
-    if birthdate_value:
-        current_user.birthdate = birthdate_value
-    if role_data.timezone:
-        # Валидируем часовой пояс
-        try:
-            import pytz
-            pytz.timezone(role_data.timezone)
-            current_user.timezone = role_data.timezone
-            logger.info(f"User {current_user.tg_id} timezone updated to {role_data.timezone}")
-        except pytz.exceptions.UnknownTimeZoneError:
-            logger.error(f"Invalid timezone '{role_data.timezone}' provided by user {current_user.tg_id}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid timezone: {role_data.timezone}. Please use a valid timezone like 'Europe/Moscow' or 'America/New_York'"
-            )
-    
-    db.commit()
-    db.refresh(current_user)
-    logger.info(f"User {current_user.tg_id} role updated to {role_data.role.value}")
-    return {"message": "Role updated successfully", "user": UserResponse.model_validate(current_user)}
 
 
 @router.post("/profile", response_model=UserResponse)
