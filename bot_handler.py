@@ -3,6 +3,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, BotCommand
 from database import SessionLocal
 from models import User, UserRole
+from config import settings
 from sqlalchemy.orm import Session
 import logging
 
@@ -123,7 +124,7 @@ async def cmd_start(message: Message):
             )
         
         # Добавляем кнопку для открытия Mini App
-        web_app_url = f"https://your-domain.com"  # Замените на ваш домен Mini App
+        web_app_url = settings.frontend_domain  # Домен Mini App из переменных окружения
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="🚀 Открыть приложение",
@@ -144,7 +145,7 @@ async def cmd_app(message: Message):
     """Открывает Mini App."""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
     
-    web_app_url = f"https://your-domain.com"  # Замените на ваш домен Mini App
+    web_app_url = settings.frontend_domain  # Домен Mini App из переменных окружения
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(

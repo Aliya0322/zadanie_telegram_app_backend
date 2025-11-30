@@ -4,6 +4,7 @@ from database import engine, Base
 from routers import groups, homework, user, auth, schedule
 from scheduler import start_scheduler, shutdown_scheduler
 from bot_notifier import close_bot
+from config import settings
 import atexit
 import logging
 
@@ -18,7 +19,7 @@ app = FastAPI(title="Telegram Mini App Backend", version="1.0.0")
 # CORS middleware для работы с фронтендом
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене указать конкретные домены
+    allow_origins=settings.get_cors_origins,  # Разрешенные домены из переменных окружения
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
