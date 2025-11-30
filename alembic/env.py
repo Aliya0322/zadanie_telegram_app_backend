@@ -1,6 +1,6 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import create_engine
 from sqlalchemy import pool
 
 from alembic import context
@@ -21,7 +21,9 @@ from models import User, Group, GroupMember, Homework, HomeworkCompletion, Sched
 config = context.config
 
 # Устанавливаем URL базы данных из настроек
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Используем прямое создание engine, чтобы избежать проблем с ConfigParser и специальными символами (например, !)
+# Вместо использования config.set_main_option, который использует ConfigParser с интерполяцией,
+# мы создадим engine напрямую и передадим его в контекст
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -50,7 +52,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    # Используем database_url напрямую из settings, минуя ConfigParser
+    url = settings.database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -69,9 +72,10 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    # Создаем engine напрямую из settings.database_url, минуя ConfigParser
+    # Это позволяет избежать проблем с специальными символами (например, !) в пароле
+    connectable = create_engine(
+        settings.database_url,
         poolclass=pool.NullPool,
     )
 
