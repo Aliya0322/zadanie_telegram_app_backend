@@ -5,6 +5,7 @@ from database import SessionLocal
 from models import User, UserRole
 from config import settings
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 import logging
 
 # Настройка логирования
@@ -20,19 +21,28 @@ router = Router()
 
 def get_or_create_user(tg_id: int, db: Session) -> User:
     """Получает или создает пользователя в БД."""
-    user = db.query(User).filter(User.tg_id == tg_id).first()
-    if not user:
-        user = User(
-            tg_id=tg_id,
-            role=UserRole.STUDENT,
-            timezone="UTC",
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        logger.info(f"Created new user with tg_id: {tg_id}")
-    return user
+    try:
+        user = db.query(User).filter(User.tg_id == tg_id).first()
+        if not user:
+            user = User(
+                tg_id=tg_id,
+                role=UserRole.STUDENT,
+                timezone="UTC",
+                is_active=True
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            logger.info(f"Created new user with tg_id: {tg_id}")
+        return user
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error in get_or_create_user: {e}", exc_info=True)
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error in get_or_create_user: {e}", exc_info=True)
+        raise
 
 
 @router.message(Command("start"))
@@ -45,8 +55,23 @@ async def cmd_start(message: Message):
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
     from models import Group, GroupMember
     
+    # Проверяем наличие пользователя в сообщении
+    if not message.from_user:
+        logger.error("message.from_user is None in cmd_start")
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+        return
+    
+    # Безопасное получение имени пользователя
+    user_name = message.from_user.first_name or message.from_user.username or "Пользователь"
+    
     db: Session = SessionLocal()
     try:
+        # Проверяем наличие ID пользователя
+        if not message.from_user.id:
+            logger.error("message.from_user.id is None")
+            await message.answer("❌ Произошла ошибка. Попробуйте позже.")
+            return
+        
         user = get_or_create_user(message.from_user.id, db)
         
         # Проверяем, есть ли параметр для присоединения к группе
@@ -67,7 +92,7 @@ async def cmd_start(message: Message):
                 # Проверяем, не является ли пользователь учителем этой группы
                 if group.teacher_id == user.id:
                     welcome_text = (
-                        f"Добро пожаловать, {message.from_user.first_name}!\n\n"
+                        f"Добро пожаловать, {user_name}!\n\n"
                         f"Откройте Mini App для входа в личный кабинет /app.\n\n"
                         f"Для дополнительной информации используйте меню /help\n"
                     )
@@ -80,8 +105,8 @@ async def cmd_start(message: Message):
                     
                     if existing_member:
                         welcome_text = (
-                            f"Добро пожаловать, {message.from_user.first_name}!\n\n"
-                            f"Откройте Mini App для входа в личный кабинет /app."
+                            f"Добро пожаловать, {user_name}!\n\n"
+                            f"Откройте Mini App для входа в личный кабинет /app.\n"
                             f"Для дополнительной информации используйте меню /help\n"
                         )
                     else:
@@ -95,42 +120,59 @@ async def cmd_start(message: Message):
                             db.commit()
                             
                             welcome_text = (
-                                f"Добро пожаловать, {message.from_user.first_name}!\n\n"
+                                f"Добро пожаловать, {user_name}!\n\n"
                                 f"✅ Вы успешно присоединились к группе '{group.name}'!\n\n"
                                 f"Откройте Mini App для просмотра заданий и расписания /app.\n"
                             )
                             logger.info(f"User {user.tg_id} joined group {group.id} via invite link")
                         except Exception as e:
                             db.rollback()
-                            logger.error(f"Error adding user to group: {e}")
+                            logger.error(f"Error adding user to group: {e}", exc_info=True)
                             welcome_text = (
                                 f"❌ Произошла ошибка при присоединении к группе.\n"
                                 f"Попробуйте позже или обратитесь к учителю."
                             )
             else:
                 welcome_text = (
-                    f"Добро пожаловать, {message.from_user.first_name}!\n\n"
+                    f"Добро пожаловать, {user_name}!\n\n"
                     f"❌ Ссылка-приглашение недействительна или группа не найдена.\n\n"
                     f"Для дополнительной информации используйте меню /help\n"
                 )
         else:
             # Обычное приветствие без параметров
             welcome_text = (
-                f"Добро пожаловать, {message.from_user.first_name}!\n\n"
+                f"Добро пожаловать, {user_name}!\n\n"
                 f"Для работы с приложением откройте Mini App:\n"
                 f"Используйте кнопку меню или команду /app\n\n"
             )
         
-        # Добавляем кнопку для открытия Mini App
-        web_app_url = settings.frontend_domain  # Домен Mini App из переменных окружения
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="Открыть приложение",
-                web_app=WebAppInfo(url=web_app_url)
-            )]
-        ])
+        # Проверяем наличие frontend_domain
+        web_app_url = settings.frontend_domain
+        if not web_app_url or web_app_url == "https://your-frontend-domain.com":
+            logger.warning(f"frontend_domain is not configured properly: {web_app_url}")
+            await message.answer(
+                welcome_text + "\n\n⚠️ Mini App не настроен. Обратитесь к администратору."
+            )
+            return
         
-        await message.answer(welcome_text, reply_markup=keyboard)
+        # Добавляем кнопку для открытия Mini App
+        try:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="Открыть приложение",
+                    web_app=WebAppInfo(url=web_app_url)
+                )]
+            ])
+            await message.answer(welcome_text, reply_markup=keyboard)
+        except Exception as e:
+            logger.error(f"Error creating WebApp button: {e}", exc_info=True)
+            # Отправляем сообщение без кнопки, если не удалось создать WebApp
+            await message.answer(welcome_text + f"\n\nИли используйте команду /app")
+            
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in cmd_start: {e}", exc_info=True)
+        db.rollback()
+        await message.answer("❌ Произошла ошибка подключения к базе данных. Попробуйте позже.")
     except Exception as e:
         logger.error(f"Error in cmd_start: {e}", exc_info=True)
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
