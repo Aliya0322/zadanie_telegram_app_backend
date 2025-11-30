@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Homework, Group, User, HomeworkCompletion
-from schemas import HomeworkCreate, HomeworkResponse
+from models import Homework, Group, User, HomeworkCompletion, GroupMember
+from schemas import HomeworkCreate, HomeworkUpdate, HomeworkResponse
 from dependencies import get_current_user, get_teacher_user, get_student_user
 from datetime import datetime, timezone
-from scheduler import schedule_homework_reminder
+from scheduler import schedule_homework_reminder, cancel_homework_reminder
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1/homework", tags=["homework"])
@@ -63,6 +63,97 @@ async def create_homework(
     schedule_homework_reminder(homework.id, deadline_utc, homework_data.group_id)
     
     return homework
+
+
+@router.put("/{homework_id}", response_model=HomeworkResponse)
+async def update_homework(
+    homework_id: int,
+    homework_data: HomeworkUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_teacher_user)
+):
+    """
+    Редактировать домашнее задание.
+    Доступно только для учителя группы.
+    При изменении дедлайна перепланируется напоминание.
+    """
+    # Получаем домашнее задание
+    homework = db.query(Homework).filter(Homework.id == homework_id).first()
+    if not homework:
+        raise HTTPException(status_code=404, detail="Homework not found")
+    
+    # Проверяем, что пользователь является учителем группы
+    group = db.query(Group).filter(Group.id == homework.group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    if group.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not the teacher of this group")
+    
+    # Сохраняем старый дедлайн для проверки изменений
+    old_deadline = homework.deadline
+    deadline_changed = False
+    
+    # Обновляем только переданные поля
+    update_data = homework_data.model_dump(exclude_unset=True)
+    
+    # Если изменяется дедлайн, обрабатываем его
+    if "deadline" in update_data:
+        deadline_utc = update_data["deadline"]
+        if deadline_utc.tzinfo is None:
+            deadline_utc = deadline_utc.replace(tzinfo=timezone.utc)
+        else:
+            deadline_utc = deadline_utc.astimezone(timezone.utc)
+        update_data["deadline"] = deadline_utc
+        deadline_changed = (deadline_utc != old_deadline)
+    
+    # Обновляем поля
+    for field, value in update_data.items():
+        setattr(homework, field, value)
+    
+    db.commit()
+    db.refresh(homework)
+    
+    # Если дедлайн изменился, отменяем старое напоминание и планируем новое
+    if deadline_changed:
+        cancel_homework_reminder(homework_id)
+        schedule_homework_reminder(homework.id, homework.deadline, homework.group_id)
+    
+    return homework
+
+
+@router.delete("/{homework_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_homework(
+    homework_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_teacher_user)
+):
+    """
+    Удалить домашнее задание.
+    Доступно только для учителя группы.
+    При удалении отменяется запланированное напоминание.
+    """
+    # Получаем домашнее задание
+    homework = db.query(Homework).filter(Homework.id == homework_id).first()
+    if not homework:
+        raise HTTPException(status_code=404, detail="Homework not found")
+    
+    # Проверяем, что пользователь является учителем группы
+    group = db.query(Group).filter(Group.id == homework.group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    if group.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not the teacher of this group")
+    
+    # Отменяем запланированное напоминание
+    cancel_homework_reminder(homework_id)
+    
+    # Удаляем домашнее задание
+    db.delete(homework)
+    db.commit()
+    
+    return None
 
 
 @router.post("/{homework_id}/complete")

@@ -32,6 +32,18 @@ def schedule_homework_reminder(homework_id: int, deadline_utc: datetime, group_i
     )
 
 
+def cancel_homework_reminder(homework_id: int):
+    """
+    Отменяет запланированное напоминание о домашнем задании.
+    """
+    job_id = f"homework_reminder_{homework_id}"
+    try:
+        scheduler.remove_job(job_id)
+    except:
+        # Задача может быть уже удалена или не существовать
+        pass
+
+
 async def send_homework_reminder_job(homework_id: int, group_id: int):
     """Задача для отправки напоминания о домашнем задании."""
     db: Session = SessionLocal()

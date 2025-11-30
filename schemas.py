@@ -70,6 +70,12 @@ class HomeworkCreate(HomeworkBase):
     pass
 
 
+class HomeworkUpdate(BaseModel):
+    """Схема для обновления домашнего задания. Все поля опциональные."""
+    description: Optional[str] = None
+    deadline: Optional[datetime] = None
+
+
 class HomeworkResponse(HomeworkBase):
     id: int
     group_id: int
@@ -89,6 +95,13 @@ class ScheduleBase(BaseModel):
 
 class ScheduleCreate(ScheduleBase):
     group_id: int
+
+
+class ScheduleUpdate(BaseModel):
+    """Схема для обновления расписания. Все поля опциональные."""
+    day_of_week: Optional[DayOfWeek] = None
+    time_at: Optional[time] = None
+    meeting_link: Optional[str] = None
 
 
 class ScheduleResponse(ScheduleBase):
