@@ -1,4 +1,15 @@
-from pydantic_settings import BaseSettings
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Fallback для старых версий pydantic
+    try:
+        from pydantic import BaseSettings
+    except ImportError:
+        raise ImportError(
+            "pydantic-settings is not installed. "
+            "Please install it with: pip install pydantic-settings"
+        )
+
 from pydantic import ValidationError
 from typing import List
 import sys

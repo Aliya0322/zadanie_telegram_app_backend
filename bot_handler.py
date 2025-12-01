@@ -1,11 +1,12 @@
 from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command
-from aiogram.types import Message, BotCommand
+from aiogram.types import Message, BotCommand, InlineKeyboardMarkup
 from database import SessionLocal
 from models import User, UserRole
 from config import settings
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from typing import Optional
 import logging
 
 # Настройка логирования
@@ -124,7 +125,10 @@ async def cmd_start(message: Message):
                             
                             # Создаем кнопку "Мой личный кабинет" для открытия Mini App
                             keyboard = _create_personal_cabinet_keyboard()
-                            await message.answer(welcome_text, reply_markup=keyboard)
+                            if keyboard:
+                                await message.answer(welcome_text, reply_markup=keyboard)
+                            else:
+                                await message.answer(welcome_text)
                             
                             logger.info(f"User {user.tg_id} joined group {group.id} via invite link")
                         except Exception as e:
@@ -154,9 +158,9 @@ async def cmd_start(message: Message):
         db.close()
 
 
-def _create_app_keyboard() -> InlineKeyboardMarkup:
+def _create_app_keyboard() -> Optional[InlineKeyboardMarkup]:
     """Создает клавиатуру с кнопкой для открытия Mini App."""
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+    from aiogram.types import InlineKeyboardButton, WebAppInfo
     
     web_app_url = settings.frontend_domain
     keyboard_buttons = []
@@ -172,9 +176,9 @@ def _create_app_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
 
 
-def _create_personal_cabinet_keyboard() -> InlineKeyboardMarkup:
+def _create_personal_cabinet_keyboard() -> Optional[InlineKeyboardMarkup]:
     """Создает клавиатуру с кнопкой 'Мой личный кабинет' для открытия Mini App."""
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+    from aiogram.types import InlineKeyboardButton, WebAppInfo
     
     web_app_url = settings.frontend_domain
     keyboard_buttons = []
@@ -190,9 +194,9 @@ def _create_personal_cabinet_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
 
 
-def _create_welcome_keyboard(is_teacher: bool) -> InlineKeyboardMarkup:
+def _create_welcome_keyboard(is_teacher: bool) -> Optional[InlineKeyboardMarkup]:
     """Создает клавиатуру с кнопками для приветственного сообщения."""
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+    from aiogram.types import InlineKeyboardButton, WebAppInfo
     
     buttons = []
     
