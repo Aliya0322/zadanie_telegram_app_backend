@@ -6,18 +6,39 @@ import asyncio
 import logging
 import sys
 import traceback
-from aiogram import Bot
-from aiogram.enums import ParseMode
-from config import settings
-from bot_handler import create_dispatcher, set_bot_commands
-# Импорт set_bot_instance будет сделан позже, чтобы избежать циклических зависимостей
 
-# Настройка логирования
+# Настройка логирования ДО импорта других модулей
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+logger.info("=" * 50)
+logger.info("Bot runner script starting...")
+logger.info("=" * 50)
+
+try:
+    from aiogram import Bot
+    from aiogram.enums import ParseMode
+    logger.info("Successfully imported aiogram")
+except Exception as e:
+    logger.error(f"Failed to import aiogram: {e}", exc_info=True)
+    sys.exit(1)
+
+try:
+    from config import settings
+    logger.info("Successfully imported config")
+except Exception as e:
+    logger.error(f"Failed to import config: {e}", exc_info=True)
+    sys.exit(1)
+
+try:
+    from bot_handler import create_dispatcher, set_bot_commands
+    logger.info("Successfully imported bot_handler")
+except Exception as e:
+    logger.error(f"Failed to import bot_handler: {e}", exc_info=True)
+    sys.exit(1)
 
 
 async def main():

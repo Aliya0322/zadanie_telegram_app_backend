@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings
+from pydantic import ValidationError
 from typing import List
+import sys
 
 
 class Settings(BaseSettings):
@@ -41,5 +43,24 @@ class Settings(BaseSettings):
         case_sensitive = False
 
 
-settings = Settings()
+# Создаем settings с обработкой ошибок
+try:
+    settings = Settings()
+except ValidationError as e:
+    missing_fields = []
+    for error in e.errors():
+        field = error.get('loc', ['unknown'])[0]
+        missing_fields.append(field.upper())
+    
+    error_msg = f"Missing required environment variables: {', '.join(missing_fields)}\n"
+    error_msg += "Please set these variables in your .env file or environment.\n"
+    error_msg += f"Error details: {e}"
+    
+    print(error_msg, file=sys.stderr)
+    sys.exit(1)
+except Exception as e:
+    error_msg = f"Failed to load settings: {e}\n"
+    error_msg += "Please check your .env file and environment variables."
+    print(error_msg, file=sys.stderr)
+    sys.exit(1)
 
