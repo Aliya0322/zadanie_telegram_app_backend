@@ -7,37 +7,60 @@ import logging
 import sys
 import traceback
 
-# Настройка логирования ДО импорта других модулей
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Выводим в stderr сразу, чтобы видеть ошибки даже если логирование не настроится
+print("=" * 50, file=sys.stderr)
+print("Bot runner script starting...", file=sys.stderr)
+print("=" * 50, file=sys.stderr)
 
-logger.info("=" * 50)
-logger.info("Bot runner script starting...")
-logger.info("=" * 50)
+# Настройка логирования ДО импорта других модулей
+try:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("=" * 50)
+    logger.info("Bot runner script starting...")
+    logger.info("=" * 50)
+except Exception as e:
+    print(f"CRITICAL: Failed to setup logging: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    sys.exit(1)
 
 try:
+    logger.info("Attempting to import aiogram...")
     from aiogram import Bot
     from aiogram.enums import ParseMode
     logger.info("Successfully imported aiogram")
 except Exception as e:
     logger.error(f"Failed to import aiogram: {e}", exc_info=True)
+    print(f"CRITICAL: Failed to import aiogram: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 
 try:
+    logger.info("Attempting to import config...")
     from config import settings
     logger.info("Successfully imported config")
 except Exception as e:
     logger.error(f"Failed to import config: {e}", exc_info=True)
+    print(f"CRITICAL: Failed to import config: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 
 try:
+    logger.info("Attempting to import bot_handler...")
     from bot_handler import create_dispatcher, set_bot_commands
     logger.info("Successfully imported bot_handler")
+except ImportError as e:
+    logger.error(f"Import error in bot_handler: {e}", exc_info=True)
+    print(f"CRITICAL: Failed to import bot_handler: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    sys.exit(1)
 except Exception as e:
-    logger.error(f"Failed to import bot_handler: {e}", exc_info=True)
+    logger.error(f"Unexpected error importing bot_handler: {e}", exc_info=True)
+    print(f"CRITICAL: Unexpected error importing bot_handler: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 
 
