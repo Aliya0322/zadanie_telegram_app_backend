@@ -1,12 +1,14 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import Homework, Group, GroupMember, User
-from bot_notifier import send_homework_reminder
+from models import Homework, Group, GroupMember, User, Schedule, DayOfWeek
+from bot_notifier import send_homework_reminder, send_class_reminder
 import pytz
 import asyncio
+import calendar
 
 scheduler = AsyncIOScheduler()
 
@@ -78,12 +80,6 @@ async def send_homework_reminder_job(homework_id: int, group_id: int):
         db.close()
 
 
-from apscheduler.triggers.cron import CronTrigger
-from models import Schedule, DayOfWeek
-from bot_notifier import send_homework_reminder, send_class_reminder
-import calendar
-
-# ... (предыдущие импорты) ...
 
 def schedule_class_reminders():
     """

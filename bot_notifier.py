@@ -27,10 +27,6 @@ def set_bot_instance(bot: Bot):
     _bot_instance = bot
 
 
-# Для обратной совместимости
-bot = get_bot_instance()
-
-
 async def send_homework_reminder(student_tg_id: int, homework: Homework, group: Group, user_timezone: str = "UTC"):
     """
     Отправляет напоминание ученику о домашнем задании.
