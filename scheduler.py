@@ -56,6 +56,10 @@ async def send_homework_reminder_job(homework_id: int, group_id: int):
         if not group:
             return
         
+        # Проверяем, что группа активна (не приостановлена)
+        if not group.is_active:
+            return
+        
         # Получаем всех учеников группы
         members = db.query(GroupMember).filter(GroupMember.group_id == group_id).all()
         
@@ -147,6 +151,10 @@ async def send_class_reminder_job(schedule_id: int):
             
         group = db.query(Group).filter(Group.id == schedule_item.group_id).first()
         if not group:
+            return
+        
+        # Проверяем, что группа активна (не приостановлена)
+        if not group.is_active:
             return
             
         members = db.query(GroupMember).filter(GroupMember.group_id == group.id).all()

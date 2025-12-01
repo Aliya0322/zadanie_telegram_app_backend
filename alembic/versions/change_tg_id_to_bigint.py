@@ -36,3 +36,10 @@ def downgrade() -> None:
                     existing_nullable=False,
                     existing_unique=True)
 
+
+
+
+
+
+
+

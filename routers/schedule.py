@@ -29,6 +29,7 @@ async def create_schedule_item(
         group_id=schedule_data.group_id,
         day_of_week=schedule_data.day_of_week,
         time_at=schedule_data.time_at,
+        duration=schedule_data.duration,
         meeting_link=schedule_data.meeting_link
     )
     

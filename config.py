@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     frontend_domain: str = "https://your-frontend-domain.com"  # Домен фронтенда (Mini App)
     api_domain: str = ""  # Домен API (опционально, для CORS)
     cors_origins: str = ""  # Разрешенные домены для CORS (через запятую, если пусто - используется frontend_domain и api_domain)
+    instruction_pdf_url: str = ""  # URL для PDF инструкции (опционально)
 
     @property
     def get_cors_origins(self) -> List[str]:

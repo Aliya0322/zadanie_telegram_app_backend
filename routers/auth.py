@@ -42,11 +42,12 @@ async def login(
     Бэкенд верифицирует, и если пользователя нет в БД, создает новую запись
     с ролью student (по умолчанию) и возвращает статус.
     
-    Можно передать:
+    При создании нового пользователя можно передать:
     - role (teacher/student) - для установки роли
     - Данные анкеты (first_name, last_name, patronymic/middle_name, birthdate, timezone) в теле запроса.
     
-    Если роль передана, она будет установлена. Если данные профиля переданы, они будут сохранены.
+    Если пользователь уже существует, просто возвращаются его данные.
+    Для обновления профиля используйте PUT /api/v1/auth/profile
     """
     # Проверяем initData
     telegram_data = verify_telegram_init_data(x_telegram_init_data)
@@ -107,49 +108,8 @@ async def login(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create user account"
             )
-    else:
-        # Если пользователь уже существует, обновляем данные, если они переданы
-        updated = False
-        
-        # Обновляем роль, если передана
-        if login_data and login_data.role:
-            user.role = login_data.role
-            updated = True
-            logger.info(f"User {user_id} role updated to {login_data.role.value}")
-        
-        # Обновляем данные анкеты, если они переданы
-        if login_data:
-            if login_data.first_name:
-                user.first_name = login_data.first_name
-                updated = True
-            if login_data.last_name:
-                user.last_name = login_data.last_name
-                updated = True
-            # Поддерживаем оба варианта: patronymic и middle_name
-            patronymic_value = login_data.patronymic or login_data.middle_name
-            if patronymic_value:
-                user.patronymic = patronymic_value
-                updated = True
-            # Поддерживаем оба варианта: birthdate и birth_date
-            birthdate_value = login_data.birthdate or login_data.birth_date
-            if birthdate_value:
-                user.birthdate = birthdate_value
-                updated = True
-            if login_data.timezone:
-                # Валидируем часовой пояс
-                try:
-                    import pytz
-                    pytz.timezone(login_data.timezone)
-                    user.timezone = login_data.timezone
-                    updated = True
-                    logger.info(f"User {user_id} timezone updated to {login_data.timezone}")
-                except pytz.exceptions.UnknownTimeZoneError:
-                    logger.warning(f"Invalid timezone '{login_data.timezone}' provided, keeping existing timezone")
-        
-        if updated:
-            db.commit()
-            db.refresh(user)
-            logger.info(f"User {user_id} profile updated during login")
+    # Если пользователь уже существует, просто возвращаем его данные
+    # Для обновления профиля используйте PUT /api/v1/auth/profile
     
     if not user.is_active:
         raise HTTPException(
@@ -170,7 +130,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.post("/profile", response_model=UserResponse)
+@router.put("/profile", response_model=UserResponse)
 async def update_profile(
     profile_data: UserUpdate,
     db: Session = Depends(get_db),
@@ -178,7 +138,9 @@ async def update_profile(
 ):
     """
     Обновить профиль пользователя.
-    Позволяет установить имя, фамилию, отчество, дату рождения и часовой пояс.
+    Позволяет обновить имя, фамилию, отчество, дату рождения и часовой пояс.
+    
+    Все поля обязательны. Для удаления дня рождения передайте birthdate: null.
     
     Часовой пояс должен быть указан вручную пользователем (например, "Europe/Moscow").
     Это необходимо для корректной работы уведомлений, так как автоматическое определение
@@ -187,9 +149,8 @@ async def update_profile(
     current_user.first_name = profile_data.first_name
     current_user.last_name = profile_data.last_name
     current_user.patronymic = profile_data.patronymic
-    
-    if profile_data.birthdate:
-        current_user.birthdate = profile_data.birthdate
+    # Явно устанавливаем birthdate (даже если None, чтобы можно было удалить)
+    current_user.birthdate = profile_data.birthdate
     
     # Валидируем и устанавливаем часовой пояс
     try:
@@ -206,5 +167,29 @@ async def update_profile(
         
     db.commit()
     db.refresh(current_user)
+    logger.info(f"User {current_user.tg_id} profile updated")
     return current_user
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Удалить текущего пользователя из БД.
+    Внимание: это удалит все связанные данные (группы, домашние задания и т.д.)
+    в соответствии с настройками каскадного удаления в БД.
+    """
+    try:
+        db.delete(current_user)
+        db.commit()
+        logger.info(f"User {current_user.tg_id} deleted from database")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting user {current_user.tg_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete user account"
+        )
 

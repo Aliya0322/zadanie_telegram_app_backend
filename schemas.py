@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, time
 from models import UserRole, DayOfWeek
@@ -49,10 +49,22 @@ class GroupResponse(GroupBase):
     id: int
     teacher_id: int
     invite_code: str
+    is_active: bool
     created_at: datetime
+    students: List[int] = []
 
     class Config:
         from_attributes = True
+
+
+class GroupUpdate(BaseModel):
+    """Схема для обновления названия группы."""
+    name: str
+
+
+class GroupStatusUpdate(BaseModel):
+    """Схема для обновления статуса группы."""
+    is_active: bool
 
 
 class GroupResponseWithInvite(GroupResponse):
@@ -90,6 +102,7 @@ class HomeworkResponse(HomeworkBase):
 class ScheduleBase(BaseModel):
     day_of_week: DayOfWeek
     time_at: time
+    duration: Optional[int] = None  # Продолжительность в минутах
     meeting_link: Optional[str] = None
 
 
@@ -101,6 +114,7 @@ class ScheduleUpdate(BaseModel):
     """Схема для обновления расписания. Все поля опциональные."""
     day_of_week: Optional[DayOfWeek] = None
     time_at: Optional[time] = None
+    duration: Optional[int] = None
     meeting_link: Optional[str] = None
 
 

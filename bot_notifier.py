@@ -1,9 +1,13 @@
 from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from config import settings
 from models import Homework, Group
 from datetime import datetime
 import pytz
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Глобальный экземпляр бота (будет установлен при запуске)
 _bot_instance: Optional[Bot] = None
@@ -65,36 +69,66 @@ async def send_class_reminder(student_tg_id: int, group: Group, schedule_item, u
     try:
         bot = get_bot_instance()
         
-        # Получаем часовой пояс пользователя
-        try:
-            user_tz = pytz.timezone(user_timezone)
-        except pytz.exceptions.UnknownTimeZoneError:
-            user_tz = pytz.timezone("UTC")
-        
-        # Формируем время начала в часовом поясе пользователя
-        # schedule_item.time_at хранится как time (без даты), нужно объединить с текущей датой
-        now = datetime.now(pytz.utc)
-        class_time = datetime.combine(now.date(), schedule_item.time_at)
-        # Приводим к UTC для корректной конвертации (предполагаем что в БД время в UTC или локальное сервера, 
-        # но лучше хранить UTC. Здесь для простоты считаем, что time_at это локальное время группы/сервера, 
-        # но для корректности лучше хранить с tz. Упростим: просто покажем время как есть)
-        
-        time_str = schedule_item.time_at.strftime("%H:%M")
-        
-        message = (
-            f"🔔 Напоминание о занятии\n\n"
-            f"Группа: {group.name}\n"
-            f"Время: {time_str}\n"
-        )
+        # Формируем сообщение
+        message = "Напоминание: Урок через 1 час!\n\n"
         
         if schedule_item.meeting_link:
-            message += f"\n🔗 Ссылка для подключения:\n{schedule_item.meeting_link}"
+            message += f"Ссылка на подключение:\n{schedule_item.meeting_link}\n\n"
         
-        message += "\n\n⏰ До начала 1 час!"
+        message += "Проверь, готова ли домашка, и до встречи на занятии! 👋"
         
-        await bot.send_message(chat_id=student_tg_id, text=message)
+        # Создаем кнопку "Открыть расписание"
+        web_app_url = settings.frontend_domain
+        keyboard = None
+        
+        if web_app_url and web_app_url != "https://your-frontend-domain.com":
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="Открыть расписание",
+                    web_app=WebAppInfo(url=web_app_url)
+                )]
+            ])
+        
+        if keyboard:
+            await bot.send_message(chat_id=student_tg_id, text=message, reply_markup=keyboard)
+        else:
+            await bot.send_message(chat_id=student_tg_id, text=message)
+            
     except Exception as e:
-        print(f"Error sending class reminder to {student_tg_id}: {e}")
+        logger.error(f"Error sending class reminder to {student_tg_id}: {e}")
+
+
+async def send_new_homework_notification(student_tg_id: int, homework: Homework, group: Group):
+    """
+    Отправляет уведомление ученику о новом домашнем задании.
+    """
+    try:
+        bot = get_bot_instance()
+        
+        message = (
+            "🔔 Новое домашнее задание!\n\n"
+            "Не затягивай!👇"
+        )
+        
+        # Создаем кнопку "Посмотреть задание"
+        web_app_url = settings.frontend_domain
+        keyboard = None
+        
+        if web_app_url and web_app_url != "https://your-frontend-domain.com":
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="Посмотреть задание",
+                    web_app=WebAppInfo(url=web_app_url)
+                )]
+            ])
+        
+        if keyboard:
+            await bot.send_message(chat_id=student_tg_id, text=message, reply_markup=keyboard)
+        else:
+            await bot.send_message(chat_id=student_tg_id, text=message)
+            
+    except Exception as e:
+        logger.error(f"Error sending new homework notification to {student_tg_id}: {e}")
 
 
 async def close_bot():

@@ -48,11 +48,11 @@ def get_or_create_user(tg_id: int, db: Session) -> User:
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     """
-    Обработчик команды /start - открывает Mini App.
+    Обработчик команды /start - перезапуск бота.
     Поддерживает Deep Linking для автоматического присоединения к группе.
     Формат: /start group_XYZ1A2B3C
+    Показывает разные сообщения для учителей и учеников.
     """
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
     from models import Group, GroupMember
     
     # Проверяем наличие пользователя в сообщении
@@ -84,18 +84,15 @@ async def cmd_start(message: Message):
             if arg.startswith("group_"):
                 group_token = arg.replace("group_", "")
         
-        # Если передан токен группы, пытаемся добавить ученика
+        # Если передан токен группы, обрабатываем присоединение
         if group_token:
             group = db.query(Group).filter(Group.invite_code == group_token).first()
             
             if group:
                 # Проверяем, не является ли пользователь учителем этой группы
                 if group.teacher_id == user.id:
-                    welcome_text = (
-                        f"Добро пожаловать, {user_name}!\n\n"
-                        f"Откройте Mini App для входа в личный кабинет /app.\n\n"
-                        f"Для дополнительной информации используйте меню /help\n"
-                    )
+                    # Учитель использует свою ссылку - показываем обычное приветствие
+                    await _send_welcome_message(message, user, user_name)
                 else:
                     # Проверяем, не состоит ли уже ученик в группе
                     existing_member = db.query(GroupMember).filter(
@@ -104,11 +101,8 @@ async def cmd_start(message: Message):
                     ).first()
                     
                     if existing_member:
-                        welcome_text = (
-                            f"Добро пожаловать, {user_name}!\n\n"
-                            f"Откройте Mini App для входа в личный кабинет /app.\n"
-                            f"Для дополнительной информации используйте меню /help\n"
-                        )
+                        # Уже в группе - показываем обычное приветствие
+                        await _send_welcome_message(message, user, user_name)
                     else:
                         # Добавляем ученика в группу
                         try:
@@ -120,54 +114,34 @@ async def cmd_start(message: Message):
                             db.commit()
                             
                             welcome_text = (
-                                f"Добро пожаловать, {user_name}!\n\n"
-                                f"✅ Вы успешно присоединились к группе '{group.name}'!\n\n"
-                                f"Откройте Mini App для просмотра заданий и расписания /app.\n"
+                                "Вы успешно добавлены в группу!\n\n"
+                                "Теперь вся учеба у вас в кармане:\n"
+                                "📅 Расписание занятий.\n"
+                                "📝 Домашние задания и дедлайны.\n"
+                                "🔔 Напоминания, чтобы ничего не пропустить.\n\n"
+                                "Чтобы посмотреть актуальные задания, нажмите кнопку ниже."
                             )
+                            
+                            # Создаем кнопку "Мой личный кабинет" для открытия Mini App
+                            keyboard = _create_personal_cabinet_keyboard()
+                            await message.answer(welcome_text, reply_markup=keyboard)
+                            
                             logger.info(f"User {user.tg_id} joined group {group.id} via invite link")
                         except Exception as e:
                             db.rollback()
                             logger.error(f"Error adding user to group: {e}", exc_info=True)
-                            welcome_text = (
+                            await message.answer(
                                 f"❌ Произошла ошибка при присоединении к группе.\n"
                                 f"Попробуйте позже или обратитесь к учителю."
                             )
             else:
-                welcome_text = (
-                    f"Добро пожаловать, {user_name}!\n\n"
+                await message.answer(
                     f"❌ Ссылка-приглашение недействительна или группа не найдена.\n\n"
-                    f"Для дополнительной информации используйте меню /help\n"
+                    f"Для дополнительной информации используйте меню /help"
                 )
         else:
             # Обычное приветствие без параметров
-            welcome_text = (
-                f"Добро пожаловать, {user_name}!\n\n"
-                f"Для работы с приложением откройте Mini App:\n"
-                f"Используйте кнопку меню или команду /app\n\n"
-            )
-        
-        # Проверяем наличие frontend_domain
-        web_app_url = settings.frontend_domain
-        if not web_app_url or web_app_url == "https://your-frontend-domain.com":
-            logger.warning(f"frontend_domain is not configured properly: {web_app_url}")
-            await message.answer(
-                welcome_text + "\n\n⚠️ Mini App не настроен. Обратитесь к администратору."
-            )
-            return
-        
-        # Добавляем кнопку для открытия Mini App
-        try:
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text="Открыть приложение",
-                    web_app=WebAppInfo(url=web_app_url)
-                )]
-            ])
-            await message.answer(welcome_text, reply_markup=keyboard)
-        except Exception as e:
-            logger.error(f"Error creating WebApp button: {e}", exc_info=True)
-            # Отправляем сообщение без кнопки, если не удалось создать WebApp
-            await message.answer(welcome_text + f"\n\nИли используйте команду /app")
+            await _send_welcome_message(message, user, user_name)
             
     except SQLAlchemyError as e:
         logger.error(f"Database error in cmd_start: {e}", exc_info=True)
@@ -178,6 +152,117 @@ async def cmd_start(message: Message):
         await message.answer("❌ Произошла ошибка. Попробуйте позже.")
     finally:
         db.close()
+
+
+def _create_app_keyboard() -> InlineKeyboardMarkup:
+    """Создает клавиатуру с кнопкой для открытия Mini App."""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+    
+    web_app_url = settings.frontend_domain
+    keyboard_buttons = []
+    
+    if web_app_url and web_app_url != "https://your-frontend-domain.com":
+        keyboard_buttons.append([
+            InlineKeyboardButton(
+                text="🚀 Открыть приложение",
+                web_app=WebAppInfo(url=web_app_url)
+            )
+        ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
+
+
+def _create_personal_cabinet_keyboard() -> InlineKeyboardMarkup:
+    """Создает клавиатуру с кнопкой 'Мой личный кабинет' для открытия Mini App."""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+    
+    web_app_url = settings.frontend_domain
+    keyboard_buttons = []
+    
+    if web_app_url and web_app_url != "https://your-frontend-domain.com":
+        keyboard_buttons.append([
+            InlineKeyboardButton(
+                text="Мой личный кабинет",
+                web_app=WebAppInfo(url=web_app_url)
+            )
+        ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons) if keyboard_buttons else None
+
+
+def _create_welcome_keyboard(is_teacher: bool) -> InlineKeyboardMarkup:
+    """Создает клавиатуру с кнопками для приветственного сообщения."""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+    
+    buttons = []
+    
+    # Кнопка "Открыть Личный Кабинет"
+    web_app_url = settings.frontend_domain
+    if web_app_url and web_app_url != "https://your-frontend-domain.com":
+        buttons.append(
+            InlineKeyboardButton(
+                text="Открыть Личный Кабинет",
+                web_app=WebAppInfo(url=web_app_url)
+            )
+        )
+    
+    # Кнопка "Инструкция (PDF)"
+    pdf_url = settings.instruction_pdf_url
+    if pdf_url:
+        buttons.append(
+            InlineKeyboardButton(
+                text="Инструкция (PDF)",
+                url=pdf_url
+            )
+        )
+    
+    if not buttons:
+        return None
+    
+    # Размещаем кнопки в два ряда, если их две
+    if len(buttons) == 2:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [buttons[0]],
+            [buttons[1]]
+        ])
+    else:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[buttons[0]]])
+    
+    return keyboard
+
+
+async def _send_welcome_message(message: Message, user: User, user_name: str):
+    """Отправляет приветственное сообщение в зависимости от роли пользователя."""
+    from models import UserRole
+    
+    if user.role == UserRole.TEACHER:
+        # Сообщение для учителя
+        welcome_text = (
+            "Добро пожаловать в My Class App!\n\n"
+            "Вы всё еще напоминаете ученикам о домашке в личку?\n\n"
+            "My Class App — это ваш цифровой ассистент, который берет рутину на себя:\n"
+            "✅ Группы и ученики в одном месте.\n"
+            "✅ Домашка с файлами и дедлайнами.\n"
+            "✅ Авто-напоминания ученикам (они точно не забудут!).\n\n"
+            "Настройте свой первый класс за 30 секунд. 👇"
+        )
+    else:
+        # Сообщение для ученика (базовое, можно расширить позже)
+        welcome_text = (
+            f"Добро пожаловать, {user_name}!\n\n"
+            "My Class App — это удобный помощник для учебы:\n"
+            "✅ Все домашние задания в одном месте.\n"
+            "✅ Автоматические напоминания о дедлайнах.\n"
+            "✅ Расписание занятий всегда под рукой.\n\n"
+            "Откройте Mini App, чтобы начать работу."
+        )
+    
+    keyboard = _create_welcome_keyboard(user.role == UserRole.TEACHER)
+    
+    if keyboard:
+        await message.answer(welcome_text, reply_markup=keyboard)
+    else:
+        await message.answer(welcome_text)
 
 
 @router.message(Command("app"))
@@ -202,91 +287,56 @@ async def cmd_app(message: Message):
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
-    """Показывает список доступных команд."""
+    """Показывает информацию о том, как пользоваться ботом и ссылку на инструкцию."""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
     help_text = (
-        "Доступные команды:\n\n"
-        "/start - Начать работу с ботом\n"
-        "/app - Открыть Mini App\n"
-        "/help - Показать эту справку\n"
-        "/status - Проверить статус аккаунта\n"
-        "/subscribe - Подписаться на уведомления\n"
-        "/unsubscribe - Отписаться от уведомлений"
+        "Запутались? Мы поможем! 🆘\n\n"
+        "My Class App интуитивно понятен, но мы подготовили подробную инструкцию для профи.\n\n"
+        "В этом файле:\n"
+        "• Как создать группу и пригласить учеников.\n"
+        "• Как прикреплять файлы к ДЗ.\n"
+        "• Как настроить расписание.\n\n"
+        "Скачивайте PDF ниже 👇"
     )
-    await message.answer(help_text)
+    
+    # Создаем кнопку "Скачать инструкцию"
+    pdf_url = settings.instruction_pdf_url
+    keyboard = None
+    
+    if pdf_url:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Скачать инструкцию",
+                url=pdf_url
+            )]
+        ])
+    
+    if keyboard:
+        await message.answer(help_text, reply_markup=keyboard)
+    else:
+        await message.answer(help_text)
 
 
-@router.message(Command("status"))
-async def cmd_status(message: Message):
-    """Показывает статус пользователя."""
-    db: Session = SessionLocal()
-    try:
-        user = db.query(User).filter(User.tg_id == message.from_user.id).first()
-        
-        if not user:
-            await message.answer("❌ Пользователь не найден. Используйте /start")
-            return
-        
-        status_text = (
-            f"👤 Статус аккаунта:\n\n"
-            f"🆔 ID: {user.tg_id}\n"
-            f"👨‍🏫 Роль: {user.role.value}\n"
-            f"🌍 Часовой пояс: {user.timezone}\n"
-            f"✅ Активен: {'Да' if user.is_active else 'Нет'}"
-        )
-        
-        await message.answer(status_text)
-    except Exception as e:
-        logger.error(f"Error in cmd_status: {e}")
-        await message.answer("❌ Произошла ошибка.")
-    finally:
-        db.close()
-
-
-@router.message(Command("subscribe"))
-async def cmd_subscribe(message: Message):
-    """Подписаться на уведомления."""
-    db: Session = SessionLocal()
-    try:
-        user = get_or_create_user(message.from_user.id, db)
-        user.is_active = True
-        db.commit()
-        
-        await message.answer("✅ Вы подписаны на уведомления!")
-    except Exception as e:
-        logger.error(f"Error in cmd_subscribe: {e}")
-        await message.answer("❌ Произошла ошибка.")
-    finally:
-        db.close()
-
-
-@router.message(Command("unsubscribe"))
-async def cmd_unsubscribe(message: Message):
-    """Отписаться от уведомлений."""
-    db: Session = SessionLocal()
-    try:
-        user = db.query(User).filter(User.tg_id == message.from_user.id).first()
-        if user:
-            user.is_active = False
-            db.commit()
-            await message.answer("❌ Вы отписаны от уведомлений.")
-        else:
-            await message.answer("❌ Пользователь не найден.")
-    except Exception as e:
-        logger.error(f"Error in cmd_unsubscribe: {e}")
-        await message.answer("❌ Произошла ошибка.")
-    finally:
-        db.close()
+@router.message(Command("support"))
+async def cmd_support(message: Message):
+    """Техподдержка."""
+    support_text = (
+        "🛠 Техподдержка\n\n"
+        "Если у вас возникли вопросы или проблемы с работой бота, "
+        "обратитесь к администратору или используйте команду /help для получения дополнительной информации.\n\n"
+        "Для работы с приложением используйте команду /app."
+    )
+    await message.answer(support_text)
 
 
 async def set_bot_commands(bot: Bot):
     """Устанавливает команды бота в меню."""
     commands = [
-        BotCommand(command="start", description="Начать работу"),
+        BotCommand(command="start", description="Перезапуск бота"),
         BotCommand(command="app", description="Открыть Mini App"),
-        BotCommand(command="help", description="Помощь"),
-        BotCommand(command="status", description="Статус аккаунта"),
-        BotCommand(command="subscribe", description="Подписаться на уведомления"),
-        BotCommand(command="unsubscribe", description="Отписаться от уведомлений"),
+        BotCommand(command="help", description="Как пользоваться"),
+        BotCommand(command="support", description="Техподдержка"),
     ]
     await bot.set_my_commands(commands)
 

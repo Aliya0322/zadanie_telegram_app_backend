@@ -47,9 +47,10 @@ class Group(Base):
     __tablename__ = "groups"
 
     id = Column(Integer, primary_key=True, index=True)
-    teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
     invite_code = Column(String, unique=True, nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False)  # False = группа приостановлена
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
@@ -63,8 +64,8 @@ class GroupMember(Base):
     __tablename__ = "group_members"
 
     id = Column(Integer, primary_key=True, index=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
@@ -76,7 +77,7 @@ class Homework(Base):
     __tablename__ = "homework"
 
     id = Column(Integer, primary_key=True, index=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
     description = Column(String, nullable=False)
     deadline = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -91,8 +92,8 @@ class HomeworkCompletion(Base):
     __tablename__ = "homework_completions"
 
     id = Column(Integer, primary_key=True, index=True)
-    homework_id = Column(Integer, ForeignKey("homework.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    homework_id = Column(Integer, ForeignKey("homework.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     completed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
@@ -104,9 +105,10 @@ class Schedule(Base):
     __tablename__ = "schedule"
 
     id = Column(Integer, primary_key=True, index=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
     day_of_week = Column(SQLEnum(DayOfWeek), nullable=False)
     time_at = Column(Time, nullable=False)
+    duration = Column(Integer, nullable=True)  # Продолжительность в минутах
     meeting_link = Column(String, nullable=True)  # Zoom/Google Meet link
 
     # Relationships
