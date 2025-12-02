@@ -18,7 +18,7 @@ async def create_schedule_item(
     Добавить занятие в расписание.
     Только для учителя группы.
     """
-    group = db.query(Group).filter(Group.id == schedule_data.group_id).first()
+    group = db.query(Group).filter(Group.id == schedule_data.groupId).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     
@@ -26,18 +26,18 @@ async def create_schedule_item(
         raise HTTPException(status_code=403, detail="You are not the teacher of this group")
     
     schedule_item = Schedule(
-        group_id=schedule_data.group_id,
-        day_of_week=schedule_data.day_of_week,
-        time_at=schedule_data.time_at,
+        group_id=schedule_data.groupId,
+        day_of_week=schedule_data.dayOfWeek,
+        time_at=schedule_data.timeAt,
         duration=schedule_data.duration,
-        meeting_link=schedule_data.meeting_link
+        meeting_link=schedule_data.meetingLink
     )
     
     db.add(schedule_item)
     db.commit()
     db.refresh(schedule_item)
     
-    return schedule_item
+    return ScheduleResponse.model_validate(schedule_item)
 
 
 @router.put("/{schedule_id}", response_model=ScheduleResponse)
@@ -65,14 +65,15 @@ async def update_schedule_item(
         raise HTTPException(status_code=403, detail="You are not the teacher of this group")
     
     # Обновляем только переданные поля
-    update_data = schedule_data.model_dump(exclude_unset=True)
+    # Используем by_alias=True чтобы получить snake_case имена полей для SQLAlchemy
+    update_data = schedule_data.model_dump(exclude_unset=True, by_alias=True)
     for field, value in update_data.items():
         setattr(schedule_item, field, value)
     
     db.commit()
     db.refresh(schedule_item)
     
-    return schedule_item
+    return ScheduleResponse.model_validate(schedule_item)
 
 
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)

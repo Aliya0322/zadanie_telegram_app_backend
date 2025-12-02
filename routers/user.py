@@ -62,9 +62,9 @@ async def get_dashboard(
         dashboard_groups.append(DashboardGroupResponse(
             id=group.id,
             name=group.name,
-            invite_code=group.invite_code,
-            teacher_name=teacher_name,
-            student_count=student_count
+            inviteCode=group.invite_code,
+            teacherName=teacher_name,
+            studentCount=student_count
         ))
     
     # Получаем расписание на сегодня
@@ -95,10 +95,10 @@ async def get_dashboard(
             group = db.query(Group).filter(Group.id == schedule.group_id).first()
             today_schedule.append(TodayScheduleResponse(
                 id=schedule.id,
-                group_name=group.name if group else "Unknown",
-                day_of_week=schedule.day_of_week,
-                time_at=schedule.time_at,
-                meeting_link=schedule.meeting_link
+                groupName=group.name if group else "Unknown",
+                dayOfWeek=schedule.day_of_week,
+                timeAt=schedule.time_at,
+                meetingLink=schedule.meeting_link
             ))
     
     # Получаем активные домашние задания (дедлайн еще не прошел)
@@ -114,10 +114,10 @@ async def get_dashboard(
         active_homeworks = [HomeworkResponse.model_validate(h) for h in homeworks]
     
     return DashboardResponse(
-        user_role=current_user.role,
+        userRole=current_user.role,
         groups=dashboard_groups,
-        today_schedule=today_schedule,
-        active_homeworks=active_homeworks
+        todaySchedule=today_schedule,
+        activeHomeworks=active_homeworks
     )
 
 
@@ -139,7 +139,7 @@ async def get_user_schedule(
     group_ids = [group.id for group in all_groups]
     
     if not group_ids:
-        return UserScheduleResponse(schedules=[], active_homeworks=[])
+        return UserScheduleResponse(schedules=[], activeHomeworks=[])
     
     # Получаем расписание для всех групп
     schedules = db.query(Schedule).filter(Schedule.group_id.in_(group_ids)).all()
@@ -153,6 +153,6 @@ async def get_user_schedule(
     
     return UserScheduleResponse(
         schedules=[ScheduleResponse.model_validate(s) for s in schedules],
-        active_homeworks=[HomeworkResponse.model_validate(h) for h in active_homeworks]
+        activeHomeworks=[HomeworkResponse.model_validate(h) for h in active_homeworks]
     )
 

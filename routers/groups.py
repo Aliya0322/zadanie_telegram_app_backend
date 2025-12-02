@@ -53,13 +53,13 @@ async def create_group(
     # Возвращаем группу с ссылкой (студентов пока нет, так как группа только создана)
     response = GroupResponseWithInvite(
         id=group.id,
-        teacher_id=group.teacher_id,
+        teacherId=group.teacher_id,
         name=group.name,
-        invite_code=group.invite_code,
-        is_active=group.is_active,
-        created_at=group.created_at,
+        inviteCode=group.invite_code,
+        isActive=group.is_active,
+        createdAt=group.created_at,
         students=[],  # Пустой список, так как группа только создана
-        invite_link=invite_link
+        inviteLink=invite_link
     )
     
     return response
@@ -133,10 +133,10 @@ async def get_group(
     group_dict = {
         "id": group.id,
         "name": group.name,
-        "teacher_id": group.teacher_id,
-        "invite_code": group.invite_code,
-        "is_active": group.is_active,
-        "created_at": group.created_at,
+        "teacherId": group.teacher_id,
+        "inviteCode": group.invite_code,
+        "isActive": group.is_active,
+        "createdAt": group.created_at,
         "students": students
     }
     return GroupResponse(**group_dict)
@@ -160,7 +160,7 @@ async def get_groups(
     # Объединяем и убираем дубликаты
     all_groups = list(set(teacher_groups + student_groups))
     
-    return all_groups
+    return [GroupResponse.model_validate(g) for g in all_groups]
 
 
 @router.put("/{group_id}", response_model=GroupResponse)
@@ -187,7 +187,7 @@ async def update_group(
     db.refresh(group)
     
     logger.info(f"Group {group_id} name updated to '{group_data.name}' by teacher {current_user.tg_id}")
-    return group
+    return GroupResponse.model_validate(group)
 
 
 @router.patch("/{group_id}/status", response_model=GroupResponse)
@@ -211,14 +211,14 @@ async def update_group_status(
     if group.teacher_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only group teacher can update group status")
     
-    group.is_active = status_data.is_active
+    group.is_active = status_data.isActive
     db.commit()
     db.refresh(group)
     
-    status_text = "возобновлена" if status_data.is_active else "приостановлена"
+    status_text = "возобновлена" if status_data.isActive else "приостановлена"
     logger.info(f"Group {group_id} {status_text} by teacher {current_user.tg_id}")
     
-    return group
+    return GroupResponse.model_validate(group)
 
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)

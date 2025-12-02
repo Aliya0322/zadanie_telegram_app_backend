@@ -7,7 +7,7 @@ from dependencies import get_current_user, get_teacher_user, get_student_user
 from datetime import datetime, timezone
 from scheduler import schedule_homework_reminder, cancel_homework_reminder
 from bot_notifier import send_new_homework_notification
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 router = APIRouter(prefix="/api/v1/homework", tags=["homework"])
@@ -53,7 +53,7 @@ async def get_homework_list(
             Homework.group_id.in_(group_ids)
         ).order_by(Homework.deadline.desc()).all()
     
-    return homeworks
+    return [HomeworkResponse.model_validate(h) for h in homeworks]
 
 
 @router.get("/{homework_id}", response_model=HomeworkResponse)
@@ -87,14 +87,17 @@ async def get_homework(
             detail="Access denied. You must be a teacher or member of this group."
         )
     
-    return homework
+    return HomeworkResponse.model_validate(homework)
 
 
 class HomeworkCreateRequest(BaseModel):
     """Схема для создания ДЗ с group_id"""
-    group_id: int
+    groupId: int = Field(alias="group_id")
     description: str
     deadline: datetime
+
+    class Config:
+        populate_by_name = True
 
 
 @router.post("/", response_model=HomeworkResponse)
@@ -115,7 +118,7 @@ async def create_homework(
     Триггерирует планировщик для отправки уведомлений за 1 час до дедлайна.
     """
     # Проверяем, что группа существует и пользователь является её учителем
-    group = db.query(Group).filter(Group.id == homework_data.group_id).first()
+    group = db.query(Group).filter(Group.id == homework_data.groupId).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     
@@ -137,7 +140,7 @@ async def create_homework(
         deadline_utc = deadline_utc.astimezone(timezone.utc)
     
     homework = Homework(
-        group_id=homework_data.group_id,
+        group_id=homework_data.groupId,
         description=homework_data.description,
         deadline=deadline_utc
     )
@@ -147,19 +150,19 @@ async def create_homework(
     db.refresh(homework)
     
     # Планируем напоминание через APScheduler
-    schedule_homework_reminder(homework.id, deadline_utc, homework_data.group_id)
+    schedule_homework_reminder(homework.id, deadline_utc, homework_data.groupId)
     
     # Отправляем уведомления всем ученикам группы о новом ДЗ в фоновом режиме
     # Проверяем, что группа активна (уведомления отправляются только для активных групп)
     if group.is_active:
-        members = db.query(GroupMember).filter(GroupMember.group_id == homework_data.group_id).all()
+        members = db.query(GroupMember).filter(GroupMember.group_id == homework_data.groupId).all()
         for member in members:
             student = db.query(User).filter(User.id == member.student_id).first()
             if student and student.is_active:
                 # Добавляем задачу в фоновые задачи FastAPI
                 background_tasks.add_task(send_new_homework_notification, student.tg_id, homework, group)
     
-    return homework
+    return HomeworkResponse.model_validate(homework)
 
 
 @router.put("/{homework_id}", response_model=HomeworkResponse)
@@ -216,7 +219,7 @@ async def update_homework(
         cancel_homework_reminder(homework_id)
         schedule_homework_reminder(homework.id, homework.deadline, homework.group_id)
     
-    return homework
+    return HomeworkResponse.model_validate(homework)
 
 
 @router.delete("/{homework_id}", status_code=status.HTTP_204_NO_CONTENT)

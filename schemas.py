@@ -6,11 +6,11 @@ from models import UserRole, DayOfWeek
 
 # User schemas
 class UserBase(BaseModel):
-    tg_id: int
+    tgId: int = Field(alias="tg_id")
     role: UserRole
     timezone: str = "UTC"
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    firstName: Optional[str] = Field(None, alias="first_name")
+    lastName: Optional[str] = Field(None, alias="last_name")
     patronymic: Optional[str] = None
     birthdate: Optional[datetime] = None
 
@@ -21,19 +21,23 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     id: int
-    is_active: bool
-    created_at: datetime
+    isActive: bool = Field(alias="is_active")
+    createdAt: datetime = Field(alias="created_at")
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class UserUpdate(BaseModel):
-    first_name: str
-    last_name: str
+    firstName: str = Field(alias="first_name")
+    lastName: str = Field(alias="last_name")
     patronymic: Optional[str] = None
     birthdate: Optional[datetime] = None
     timezone: str  # Обязательное поле - пользователь должен указать вручную
+
+    class Config:
+        populate_by_name = True
 
 
 # Group schemas
@@ -47,14 +51,15 @@ class GroupCreate(GroupBase):
 
 class GroupResponse(GroupBase):
     id: int
-    teacher_id: int
-    invite_code: str
-    is_active: bool
-    created_at: datetime
+    teacherId: int = Field(alias="teacher_id")
+    inviteCode: str = Field(alias="invite_code")
+    isActive: bool = Field(alias="is_active")
+    createdAt: datetime = Field(alias="created_at")
     students: List[int] = []
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class GroupUpdate(BaseModel):
@@ -64,12 +69,15 @@ class GroupUpdate(BaseModel):
 
 class GroupStatusUpdate(BaseModel):
     """Схема для обновления статуса группы."""
-    is_active: bool
+    isActive: bool = Field(alias="is_active")
+
+    class Config:
+        populate_by_name = True
 
 
 class GroupResponseWithInvite(GroupResponse):
     """Расширенный ответ с ссылкой-приглашением."""
-    invite_link: str
+    inviteLink: str = Field(alias="invite_link")
 
 
 # Homework schemas
@@ -90,81 +98,103 @@ class HomeworkUpdate(BaseModel):
 
 class HomeworkResponse(HomeworkBase):
     id: int
-    group_id: int
-    created_at: datetime
-    reminder_sent: bool
+    groupId: int = Field(alias="group_id")
+    createdAt: datetime = Field(alias="created_at")
+    reminderSent: bool = Field(alias="reminder_sent")
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 # Schedule schemas
 class ScheduleBase(BaseModel):
-    day_of_week: DayOfWeek
-    time_at: time
+    dayOfWeek: DayOfWeek = Field(alias="day_of_week")
+    timeAt: time = Field(alias="time_at")
     duration: Optional[int] = None  # Продолжительность в минутах
-    meeting_link: Optional[str] = None
+    meetingLink: Optional[str] = Field(None, alias="meeting_link")
+
+    class Config:
+        populate_by_name = True
 
 
 class ScheduleCreate(ScheduleBase):
-    group_id: int
+    groupId: int = Field(alias="group_id")
+
+    class Config:
+        populate_by_name = True
 
 
 class ScheduleUpdate(BaseModel):
     """Схема для обновления расписания. Все поля опциональные."""
-    day_of_week: Optional[DayOfWeek] = None
-    time_at: Optional[time] = None
+    dayOfWeek: Optional[DayOfWeek] = Field(None, alias="day_of_week")
+    timeAt: Optional[time] = Field(None, alias="time_at")
     duration: Optional[int] = None
-    meeting_link: Optional[str] = None
+    meetingLink: Optional[str] = Field(None, alias="meeting_link")
+
+    class Config:
+        populate_by_name = True
 
 
 class ScheduleResponse(ScheduleBase):
     id: int
-    group_id: int
+    groupId: int = Field(alias="group_id")
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 # Combined response schemas
 class UserScheduleResponse(BaseModel):
     schedules: List[ScheduleResponse]
-    active_homeworks: List[HomeworkResponse]
+    activeHomeworks: List[HomeworkResponse] = Field(alias="active_homeworks")
+
+    class Config:
+        populate_by_name = True
 
 
 # Auth schemas
 class LoginResponse(BaseModel):
     user: UserResponse
-    is_new_user: bool
+    isNewUser: bool = Field(alias="is_new_user")
     message: str
+
+    class Config:
+        populate_by_name = True
 
 
 # Dashboard schemas
 class DashboardGroupResponse(BaseModel):
     id: int
     name: str
-    invite_code: str
-    teacher_name: str = ""
-    student_count: int = 0
+    inviteCode: str = Field(alias="invite_code")
+    teacherName: str = Field(default="", alias="teacher_name")
+    studentCount: int = Field(default=0, alias="student_count")
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class TodayScheduleResponse(BaseModel):
     id: int
-    group_name: str
-    day_of_week: DayOfWeek
-    time_at: time
-    meeting_link: Optional[str] = None
+    groupName: str = Field(alias="group_name")
+    dayOfWeek: DayOfWeek = Field(alias="day_of_week")
+    timeAt: time = Field(alias="time_at")
+    meetingLink: Optional[str] = Field(None, alias="meeting_link")
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class DashboardResponse(BaseModel):
-    user_role: UserRole
+    userRole: UserRole = Field(alias="user_role")
     groups: List[DashboardGroupResponse]
-    today_schedule: List[TodayScheduleResponse]
-    active_homeworks: List[HomeworkResponse]
+    todaySchedule: List[TodayScheduleResponse] = Field(alias="today_schedule")
+    activeHomeworks: List[HomeworkResponse] = Field(alias="active_homeworks")
+
+    class Config:
+        populate_by_name = True
 

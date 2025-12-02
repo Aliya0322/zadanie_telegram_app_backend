@@ -119,7 +119,7 @@ async def login(
     
     return LoginResponse(
         user=UserResponse.model_validate(user),
-        is_new_user=is_new_user,
+        isNewUser=is_new_user,
         message="Login successful" if not is_new_user else "Registration successful"
     )
 
@@ -127,7 +127,7 @@ async def login(
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     """Получить информацию о текущем пользователе."""
-    return current_user
+    return UserResponse.model_validate(current_user)
 
 
 @router.put("/profile", response_model=UserResponse)
@@ -146,8 +146,8 @@ async def update_profile(
     Это необходимо для корректной работы уведомлений, так как автоматическое определение
     может быть неточным при использовании VPN.
     """
-    current_user.first_name = profile_data.first_name
-    current_user.last_name = profile_data.last_name
+    current_user.first_name = profile_data.firstName
+    current_user.last_name = profile_data.lastName
     current_user.patronymic = profile_data.patronymic
     # Явно устанавливаем birthdate (даже если None, чтобы можно было удалить)
     current_user.birthdate = profile_data.birthdate
@@ -168,7 +168,7 @@ async def update_profile(
     db.commit()
     db.refresh(current_user)
     logger.info(f"User {current_user.tg_id} profile updated")
-    return current_user
+    return UserResponse.model_validate(current_user)
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
