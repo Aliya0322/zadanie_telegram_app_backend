@@ -86,10 +86,10 @@ async def get_invite_link(
     invite_link = generate_invite_link(group.invite_code)
     
     return {
-        "group_id": group.id,
-        "group_name": group.name,
-        "invite_code": group.invite_code,
-        "invite_link": invite_link
+        "groupId": group.id,
+        "groupName": group.name,
+        "inviteCode": group.invite_code,
+        "inviteLink": invite_link
     }
 
 

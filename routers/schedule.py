@@ -1,11 +1,65 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Schedule, Group, User
+from models import Schedule, Group, User, GroupMember
 from schemas import ScheduleCreate, ScheduleUpdate, ScheduleResponse
-from dependencies import get_teacher_user
+from dependencies import get_teacher_user, get_current_user
+from typing import Optional
 
 router = APIRouter(prefix="/api/v1/schedule", tags=["schedule"])
+
+
+@router.get("/", response_model=list[ScheduleResponse])
+async def get_schedule(
+    groupId: Optional[int] = Query(None, description="Фильтр по ID группы"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Получить расписание.
+    
+    Если указан groupId, возвращает расписание только для этой группы.
+    Если groupId не указан, возвращает расписание для всех групп пользователя.
+    Доступно для учителя группы или учеников, состоящих в группе.
+    """
+    if groupId:
+        # Проверяем доступ к группе
+        group = db.query(Group).filter(Group.id == groupId).first()
+        if not group:
+            raise HTTPException(status_code=404, detail="Group not found")
+        
+        # Проверяем права доступа: пользователь должен быть либо учителем, либо учеником группы
+        is_teacher = group.teacher_id == current_user.id
+        is_student = db.query(GroupMember).filter(
+            GroupMember.group_id == groupId,
+            GroupMember.student_id == current_user.id
+        ).first() is not None
+        
+        if not (is_teacher or is_student):
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied. You must be a teacher or member of this group."
+            )
+        
+        schedules = db.query(Schedule).filter(Schedule.group_id == groupId).all()
+    else:
+        # Получаем все группы пользователя
+        teacher_groups = db.query(Group).filter(Group.teacher_id == current_user.id).all()
+        
+        student_memberships = db.query(GroupMember).filter(
+            GroupMember.student_id == current_user.id
+        ).all()
+        student_groups = [membership.group for membership in student_memberships]
+        
+        all_groups = list(set(teacher_groups + student_groups))
+        group_ids = [group.id for group in all_groups]
+        
+        if not group_ids:
+            return []
+        
+        schedules = db.query(Schedule).filter(Schedule.group_id.in_(group_ids)).all()
+    
+    return [ScheduleResponse.model_validate(s) for s in schedules]
 
 
 @router.post("/", response_model=ScheduleResponse)
