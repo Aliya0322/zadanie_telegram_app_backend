@@ -218,6 +218,10 @@ class TodayScheduleResponse(BaseModel):
 
 class DashboardResponse(BaseModel):
     userRole: UserRole = Field(alias="user_role")
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    patronymic: Optional[str] = None
+    birthdate: Optional[datetime] = None
     groups: List[DashboardGroupResponse]
     todaySchedule: List[TodayScheduleResponse]
     activeHomeworks: List[HomeworkResponse]

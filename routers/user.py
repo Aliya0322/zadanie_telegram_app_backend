@@ -117,6 +117,10 @@ async def get_dashboard(
     
     return DashboardResponse(
         userRole=current_user.role,
+        firstName=current_user.first_name,
+        lastName=current_user.last_name,
+        patronymic=current_user.patronymic,
+        birthdate=current_user.birthdate,
         groups=dashboard_groups,
         todaySchedule=today_schedule,
         activeHomeworks=active_homeworks
