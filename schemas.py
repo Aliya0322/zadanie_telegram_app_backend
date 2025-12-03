@@ -203,6 +203,17 @@ class TodayScheduleResponse(BaseModel):
     class Config:
         from_attributes = True
         populate_by_name = True
+    
+    @model_serializer
+    def ser_model(self):
+        # Сериализуем с именами полей (camelCase), а не alias'ами
+        return {
+            "id": self.id,
+            "groupName": self.groupName,
+            "dayOfWeek": self.dayOfWeek,
+            "timeAt": self.timeAt,
+            "meetingLink": self.meetingLink
+        }
 
 
 class DashboardResponse(BaseModel):
