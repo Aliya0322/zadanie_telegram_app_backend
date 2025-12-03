@@ -305,6 +305,42 @@ class HomeworkCreateForGroup(BaseModel):
         populate_by_name = True
 
 
+@router.get("/{group_id}/homework", response_model=list[HomeworkResponse])
+async def get_homework_for_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Получить список домашних заданий для группы.
+    Доступно для учителя группы или учеников, состоящих в группе.
+    """
+    # Проверяем, что группа существует
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    # Проверяем права доступа: пользователь должен быть либо учителем, либо учеником группы
+    is_teacher = group.teacher_id == current_user.id
+    is_student = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.student_id == current_user.id
+    ).first() is not None
+    
+    if not (is_teacher or is_student):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied. You must be a teacher or member of this group."
+        )
+    
+    # Получаем домашние задания для группы
+    homeworks = db.query(Homework).filter(
+        Homework.group_id == group_id
+    ).order_by(Homework.deadline.desc()).all()
+    
+    return [HomeworkResponse.model_validate(h) for h in homeworks]
+
+
 @router.post("/{group_id}/homework", response_model=HomeworkResponse)
 async def create_homework_for_group(
     group_id: int,
