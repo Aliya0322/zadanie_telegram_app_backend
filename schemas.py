@@ -46,9 +46,9 @@ class UserResponse(BaseModel):
             "firstName": self.firstName,
             "lastName": self.lastName,
             "patronymic": self.patronymic,
-            "birthdate": self.birthdate,
+            "birthdate": self.birthdate.isoformat() if self.birthdate else None,  # Явно обрабатываем None и datetime
             "isActive": self.isActive,
-            "createdAt": self.createdAt
+            "createdAt": self.createdAt.isoformat() if isinstance(self.createdAt, datetime) else self.createdAt
         }
 
 
@@ -230,11 +230,12 @@ class TodayScheduleResponse(BaseModel):
     @model_serializer
     def ser_model(self):
         # Сериализуем с именами полей (camelCase), а не alias'ами
+        # timeAt нужно сериализовать как строку (HH:MM:SS), чтобы фронтенд мог использовать .split()
         return {
             "id": self.id,
             "groupName": self.groupName,
             "dayOfWeek": self.dayOfWeek,
-            "timeAt": self.timeAt,
+            "timeAt": str(self.timeAt) if self.timeAt else None,  # Преобразуем time в строку
             "meetingLink": self.meetingLink
         }
 

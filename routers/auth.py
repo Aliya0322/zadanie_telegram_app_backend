@@ -196,6 +196,41 @@ async def update_profile(
     return UserResponse.model_validate(current_user)
 
 
+@router.put("/me", response_model=UserResponse)
+async def update_profile_me(
+    profile_data: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Обновить профиль пользователя (алиас для /profile).
+    Позволяет обновить имя, фамилию, отчество, дату рождения и часовой пояс.
+    """
+    current_user.first_name = profile_data.firstName
+    current_user.last_name = profile_data.lastName
+    current_user.patronymic = profile_data.patronymic
+    # Явно устанавливаем birthdate (даже если None, чтобы можно было удалить)
+    current_user.birthdate = profile_data.birthdate
+    
+    # Валидируем и устанавливаем часовой пояс
+    try:
+        import pytz
+        pytz.timezone(profile_data.timezone)
+        current_user.timezone = profile_data.timezone
+        logger.info(f"User {current_user.tg_id} updated timezone to {profile_data.timezone}")
+    except pytz.exceptions.UnknownTimeZoneError:
+        logger.error(f"Invalid timezone '{profile_data.timezone}' provided by user {current_user.tg_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid timezone: {profile_data.timezone}. Please use a valid timezone like 'Europe/Moscow' or 'America/New_York'"
+        )
+        
+    db.commit()
+    db.refresh(current_user)
+    logger.info(f"User {current_user.tg_id} profile updated via /me endpoint")
+    return UserResponse.model_validate(current_user)
+
+
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     db: Session = Depends(get_db),
