@@ -136,9 +136,13 @@ class ScheduleUpdate(BaseModel):
         populate_by_name = True
 
 
-class ScheduleResponse(ScheduleBase):
+class ScheduleResponse(BaseModel):
     id: int
     groupId: int = Field(alias="group_id")
+    dayOfWeek: DayOfWeek
+    timeAt: time
+    duration: Optional[int] = None
+    meetingLink: Optional[str] = None
 
     class Config:
         from_attributes = True
