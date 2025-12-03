@@ -25,11 +25,13 @@ def upgrade() -> None:
     op.add_column('users', sa.Column('patronymic', sa.String(), nullable=True))
     op.add_column('users', sa.Column('birthdate', sa.DateTime(timezone=True), nullable=True))
     
-    # Add meeting link to schedule
+    # Add meeting link and duration to schedule
     op.add_column('schedule', sa.Column('meeting_link', sa.String(), nullable=True))
+    op.add_column('schedule', sa.Column('duration', sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:
+    op.drop_column('schedule', 'duration')
     op.drop_column('schedule', 'meeting_link')
     op.drop_column('users', 'birthdate')
     op.drop_column('users', 'patronymic')
