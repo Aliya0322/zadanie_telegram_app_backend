@@ -192,8 +192,8 @@ class TodayScheduleResponse(BaseModel):
 class DashboardResponse(BaseModel):
     userRole: UserRole = Field(alias="user_role")
     groups: List[DashboardGroupResponse]
-    todaySchedule: List[TodayScheduleResponse] = Field(alias="today_schedule")
-    activeHomeworks: List[HomeworkResponse] = Field(alias="active_homeworks")
+    todaySchedule: List[TodayScheduleResponse]
+    activeHomeworks: List[HomeworkResponse]
 
     class Config:
         populate_by_name = True
