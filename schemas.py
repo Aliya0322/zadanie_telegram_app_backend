@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, model_serializer
-from typing import Optional, List
+from pydantic import BaseModel, Field, model_serializer, field_validator
+from typing import Optional, List, Union
 from datetime import datetime, time
 from models import UserRole, DayOfWeek
 
@@ -56,11 +56,31 @@ class UserUpdate(BaseModel):
     firstName: str = Field(alias="first_name")
     lastName: str = Field(alias="last_name")
     patronymic: Optional[str] = None
-    birthdate: Optional[datetime] = None
+    birthdate: Optional[Union[datetime, str]] = None  # Принимаем и строку, и datetime
     timezone: str  # Обязательное поле - пользователь должен указать вручную
 
     class Config:
         populate_by_name = True
+    
+    @field_validator('birthdate', mode='before')
+    @classmethod
+    def parse_birthdate(cls, v):
+        """Принимает строку ISO или datetime и преобразует в datetime."""
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, str):
+            try:
+                # Убираем пробелы
+                v = v.strip()
+                # Заменяем Z на +00:00 для fromisoformat
+                if v.endswith('Z'):
+                    v = v[:-1] + '+00:00'
+                return datetime.fromisoformat(v)
+            except (ValueError, AttributeError):
+                raise ValueError(f"Invalid date format: {v}. Expected ISO format (e.g., '2025-12-03T15:39:30.662Z')")
+        raise ValueError(f"Invalid birthdate type: {type(v)}. Expected string or datetime.")
 
 
 # Group schemas
