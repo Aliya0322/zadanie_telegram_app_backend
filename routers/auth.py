@@ -18,15 +18,13 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 class LoginRequest(BaseModel):
     """Модель для запроса логина (initData передается в заголовке)"""
     role: Optional[UserRole] = None  # Опциональная роль (teacher/student)
-    first_name: Optional[str] = Field(None, alias="firstName")
-    last_name: Optional[str] = Field(None, alias="lastName")
-    middle_name: Optional[str] = Field(None, alias="middleName")
-    patronymic: Optional[str] = None  # Для совместимости с фронтендом (middleName -> patronymic)
-    birth_date: Optional[datetime] = Field(None, alias="birthDate")
-    birthdate: Optional[datetime] = None  # Для совместимости с фронтендом
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    patronymic: Optional[str] = None
+    birthdate: Optional[datetime] = None
     timezone: Optional[str] = None
     
-    model_config = ConfigDict(populate_by_name=True)  # Позволяет использовать как alias, так и имя поля
+    model_config = ConfigDict(populate_by_name=True)
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -44,10 +42,10 @@ async def login(
     
     При создании нового пользователя можно передать:
     - role (teacher/student) - для установки роли
-    - Данные анкеты (first_name, last_name, patronymic/middle_name, birthdate, timezone) в теле запроса.
+    - Данные анкеты (firstName, lastName, patronymic, birthdate, timezone) в теле запроса.
     
-    Если пользователь уже существует, просто возвращаются его данные.
-    Для обновления профиля используйте PUT /api/v1/auth/profile
+    Если пользователь уже существует, профиль обновляется переданными данными (если они указаны).
+    Для полного обновления профиля используйте PUT /api/v1/auth/profile
     """
     # Проверяем initData
     telegram_data = verify_telegram_init_data(x_telegram_init_data)
@@ -83,18 +81,16 @@ async def login(
             
             # Сохраняем данные анкеты, если они переданы
             if login_data:
-                if login_data.first_name:
-                    user.first_name = login_data.first_name
-                if login_data.last_name:
-                    user.last_name = login_data.last_name
-                # Поддерживаем оба варианта: patronymic и middle_name
-                patronymic_value = login_data.patronymic or login_data.middle_name
-                if patronymic_value:
-                    user.patronymic = patronymic_value
-                # Поддерживаем оба варианта: birthdate и birth_date
-                birthdate_value = login_data.birthdate or login_data.birth_date
-                if birthdate_value:
-                    user.birthdate = birthdate_value
+                if login_data.firstName:
+                    user.first_name = login_data.firstName
+                if login_data.lastName:
+                    user.last_name = login_data.lastName
+                if login_data.patronymic:
+                    user.patronymic = login_data.patronymic
+                if login_data.birthdate:
+                    user.birthdate = login_data.birthdate
+                if login_data.timezone:
+                    user.timezone = login_data.timezone
             
             db.add(user)
             db.commit()
@@ -108,8 +104,37 @@ async def login(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create user account"
             )
-    # Если пользователь уже существует, просто возвращаем его данные
-    # Для обновления профиля используйте PUT /api/v1/auth/profile
+    else:
+        # Если пользователь уже существует, обновляем его профиль, если переданы данные
+        if login_data:
+            updated = False
+            if login_data.firstName:
+                user.first_name = login_data.firstName
+                updated = True
+            if login_data.lastName:
+                user.last_name = login_data.lastName
+                updated = True
+            if login_data.patronymic is not None:
+                user.patronymic = login_data.patronymic
+                updated = True
+            if login_data.birthdate is not None:
+                user.birthdate = login_data.birthdate
+                updated = True
+            if login_data.timezone:
+                # Валидируем timezone перед сохранением
+                try:
+                    import pytz
+                    pytz.timezone(login_data.timezone)
+                    user.timezone = login_data.timezone
+                    updated = True
+                    logger.info(f"User {user.tg_id} updated timezone to {login_data.timezone}")
+                except pytz.exceptions.UnknownTimeZoneError:
+                    logger.warning(f"Invalid timezone '{login_data.timezone}' provided by user {user.tg_id}, keeping current timezone")
+            
+            if updated:
+                db.commit()
+                db.refresh(user)
+                logger.info(f"User {user.tg_id} profile updated via login")
     
     if not user.is_active:
         raise HTTPException(

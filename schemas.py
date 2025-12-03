@@ -19,14 +19,37 @@ class UserCreate(UserBase):
     pass
 
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: int
+    tgId: int = Field(alias="tg_id")
+    role: UserRole
+    timezone: str
+    firstName: Optional[str] = Field(None, alias="first_name")
+    lastName: Optional[str] = Field(None, alias="last_name")
+    patronymic: Optional[str] = None
+    birthdate: Optional[datetime] = None
     isActive: bool = Field(alias="is_active")
     createdAt: datetime = Field(alias="created_at")
 
     class Config:
         from_attributes = True
         populate_by_name = True
+    
+    @model_serializer
+    def ser_model(self):
+        # Сериализуем с именами полей (camelCase), а не alias'ами
+        return {
+            "id": self.id,
+            "tgId": self.tgId,
+            "role": self.role,
+            "timezone": self.timezone,
+            "firstName": self.firstName,
+            "lastName": self.lastName,
+            "patronymic": self.patronymic,
+            "birthdate": self.birthdate,
+            "isActive": self.isActive,
+            "createdAt": self.createdAt
+        }
 
 
 class UserUpdate(BaseModel):
