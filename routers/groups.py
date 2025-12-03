@@ -157,8 +157,9 @@ async def get_groups(
     ).all()
     student_groups = [membership.group for membership in student_memberships]
     
-    # Объединяем и убираем дубликаты
-    all_groups = list(set(teacher_groups + student_groups))
+    # Объединяем и убираем дубликаты по ID (объекты SQLAlchemy не хешируемые)
+    all_groups_dict = {group.id: group for group in teacher_groups + student_groups}
+    all_groups = list(all_groups_dict.values())
     
     return [GroupResponse.model_validate(g) for g in all_groups]
 

@@ -33,7 +33,9 @@ async def get_homework_list(
     ).all()
     student_groups = [membership.group for membership in student_memberships]
     
-    all_groups = list(set(teacher_groups + student_groups))
+    # Убираем дубликаты по ID (объекты SQLAlchemy не хешируемые)
+    all_groups_dict = {group.id: group for group in teacher_groups + student_groups}
+    all_groups = list(all_groups_dict.values())
     group_ids = [group.id for group in all_groups]
     
     if not group_ids:
