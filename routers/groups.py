@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Group, GroupMember, User
-from schemas import GroupCreate, GroupResponse, GroupResponseWithInvite, GroupUpdate, GroupStatusUpdate
+from models import Group, GroupMember, User, Homework
+from schemas import GroupCreate, GroupResponse, GroupResponseWithInvite, GroupUpdate, GroupStatusUpdate, HomeworkResponse
 from dependencies import get_current_user, get_teacher_user
 from utils import generate_invite_link
+from datetime import datetime, timezone
+from scheduler import schedule_homework_reminder
+from bot_notifier import send_new_homework_notification
+from pydantic import BaseModel, Field
 import secrets
 import string
 import logging
@@ -290,4 +294,79 @@ async def remove_student_from_group(
     
     logger.info(f"Student {student_tg_id} removed from group {group_id} by teacher {current_user.tg_id}")
     return None
+
+
+class HomeworkCreateForGroup(BaseModel):
+    """Схема для создания ДЗ для группы (без group_id, так как он в пути)"""
+    description: str
+    deadline: datetime
+
+    class Config:
+        populate_by_name = True
+
+
+@router.post("/{group_id}/homework", response_model=HomeworkResponse)
+async def create_homework_for_group(
+    group_id: int,
+    homework_data: HomeworkCreateForGroup,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_teacher_user)
+):
+    """
+    Создать домашнее задание для группы.
+    Доступно только для учителя группы.
+    
+    Принимает:
+    - description: Описание задания
+    - deadline: Дедлайн (в UTC)
+    
+    Триггерирует планировщик для отправки уведомлений за 1 час до дедлайна.
+    """
+    # Проверяем, что группа существует и пользователь является её учителем
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    if group.teacher_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not the teacher of this group")
+    
+    # Проверяем, что группа активна (не приостановлена)
+    if not group.is_active:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot create homework for paused group. Please resume the group first."
+        )
+    
+    # Убеждаемся, что deadline в UTC
+    deadline_utc = homework_data.deadline
+    if deadline_utc.tzinfo is None:
+        deadline_utc = deadline_utc.replace(tzinfo=timezone.utc)
+    else:
+        deadline_utc = deadline_utc.astimezone(timezone.utc)
+    
+    homework = Homework(
+        group_id=group_id,
+        description=homework_data.description,
+        deadline=deadline_utc
+    )
+    
+    db.add(homework)
+    db.commit()
+    db.refresh(homework)
+    
+    # Планируем напоминание через APScheduler
+    schedule_homework_reminder(homework.id, deadline_utc, group_id)
+    
+    # Отправляем уведомления всем ученикам группы о новом ДЗ в фоновом режиме
+    # Проверяем, что группа активна (уведомления отправляются только для активных групп)
+    if group.is_active:
+        members = db.query(GroupMember).filter(GroupMember.group_id == group_id).all()
+        for member in members:
+            student = db.query(User).filter(User.id == member.student_id).first()
+            if student and student.is_active:
+                # Добавляем задачу в фоновые задачи FastAPI
+                background_tasks.add_task(send_new_homework_notification, student.tg_id, homework, group)
+    
+    return HomeworkResponse.model_validate(homework)
 
