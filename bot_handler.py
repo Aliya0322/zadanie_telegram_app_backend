@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from typing import Optional
 import logging
+import urllib.parse
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -84,6 +85,8 @@ async def cmd_start(message: Message):
             arg = command_args[1]
             if arg.startswith("group_"):
                 group_token = arg.replace("group_", "")
+                # Декодируем URL-кодированный invite_code (на случай если он был закодирован)
+                group_token = urllib.parse.unquote(group_token)
         
         # Если передан токен группы, обрабатываем присоединение
         if group_token:

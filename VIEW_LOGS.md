@@ -165,3 +165,8 @@ docker-compose logs bot | grep -i error > bot_errors_$(date +%Y%m%d_%H%M%S).txt
 
 
 
+
+
+
+
+

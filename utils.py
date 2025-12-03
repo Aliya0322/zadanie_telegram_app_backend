@@ -4,6 +4,7 @@
 from aiogram import Bot
 from config import settings
 import logging
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -49,5 +50,9 @@ def generate_invite_link(invite_code: str, bot_username: str = None) -> str:
     if not bot_username:
         bot_username = _bot_username_cache or "your_bot_username"
     
-    return f"https://t.me/{bot_username}?start=group_{invite_code}"
+    # URL-кодируем invite_code для безопасного использования в URL
+    # Это необходимо, если код содержит специальные символы (@, ?, &, = и т.д.)
+    encoded_code = urllib.parse.quote(invite_code, safe='')
+    
+    return f"https://t.me/{bot_username}?start=group_{encoded_code}"
 

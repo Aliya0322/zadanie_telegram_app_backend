@@ -17,9 +17,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Telegram Mini App Backend", version="1.0.0")
 
 # CORS middleware для работы с фронтендом
+cors_origins = settings.get_cors_origins
+logger.info(f"CORS allowed origins: {cors_origins}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_cors_origins,  # Разрешенные домены из переменных окружения
+    allow_origins=cors_origins,  # Разрешенные домены из переменных окружения
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -34,20 +34,45 @@ class Settings(BaseSettings):
     @property
     def get_cors_origins(self) -> List[str]:
         """Возвращает список разрешенных доменов для CORS."""
+        origins = set()  # Используем set для избежания дубликатов
+        
         if self.cors_origins:
             # Если указаны вручную, используем их
-            return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+            for origin in self.cors_origins.split(","):
+                origin = origin.strip()
+                if origin:
+                    origins.add(origin)
         else:
             # Иначе используем frontend_domain и api_domain
-            origins = [self.frontend_domain]
+            if self.frontend_domain:
+                origins.add(self.frontend_domain)
+                # Добавляем варианты с www и без www
+                if self.frontend_domain.startswith("https://"):
+                    domain_without_protocol = self.frontend_domain.replace("https://", "")
+                    if domain_without_protocol.startswith("www."):
+                        # Если есть www, добавляем вариант без www
+                        origins.add(f"https://{domain_without_protocol.replace('www.', '', 1)}")
+                    else:
+                        # Если нет www, добавляем вариант с www
+                        origins.add(f"https://www.{domain_without_protocol}")
+            
             if self.api_domain and self.api_domain != self.frontend_domain:
-                origins.append(self.api_domain)
-            # Добавляем варианты с www
-            if self.frontend_domain.startswith("https://"):
-                domain_without_protocol = self.frontend_domain.replace("https://", "")
-                if not domain_without_protocol.startswith("www."):
-                    origins.append(f"https://www.{domain_without_protocol}")
-            return origins
+                origins.add(self.api_domain)
+                # Также добавляем варианты для api_domain
+                if self.api_domain.startswith("https://"):
+                    domain_without_protocol = self.api_domain.replace("https://", "")
+                    if domain_without_protocol.startswith("www."):
+                        origins.add(f"https://{domain_without_protocol.replace('www.', '', 1)}")
+                    else:
+                        origins.add(f"https://www.{domain_without_protocol}")
+        
+        # Для локальной разработки добавляем localhost
+        origins.add("http://localhost:3000")
+        origins.add("http://localhost:8000")
+        origins.add("http://127.0.0.1:3000")
+        origins.add("http://127.0.0.1:8000")
+        
+        return list(origins)
 
     class Config:
         env_file = ".env"
