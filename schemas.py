@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 from typing import Optional, List
 from datetime import datetime, time
 from models import UserRole, DayOfWeek
@@ -139,14 +139,26 @@ class ScheduleUpdate(BaseModel):
 class ScheduleResponse(BaseModel):
     id: int
     groupId: int = Field(alias="group_id")
-    dayOfWeek: DayOfWeek
-    timeAt: time
+    dayOfWeek: DayOfWeek = Field(alias="day_of_week")
+    timeAt: time = Field(alias="time_at")
     duration: Optional[int] = None
-    meetingLink: Optional[str] = None
+    meetingLink: Optional[str] = Field(None, alias="meeting_link")
 
     class Config:
         from_attributes = True
         populate_by_name = True
+    
+    @model_serializer
+    def ser_model(self):
+        # Сериализуем с именами полей (camelCase), а не alias'ами
+        return {
+            "id": self.id,
+            "groupId": self.groupId,
+            "dayOfWeek": self.dayOfWeek,
+            "timeAt": self.timeAt,
+            "duration": self.duration,
+            "meetingLink": self.meetingLink
+        }
 
 
 # Combined response schemas
