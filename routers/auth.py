@@ -27,6 +27,18 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class UpdateRoleRequest(BaseModel):
+    """Модель для обновления роли пользователя."""
+    role: UserRole
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    patronymic: Optional[str] = None
+    birthdate: Optional[datetime] = None
+    timezone: Optional[str] = None
+    
+    model_config = ConfigDict(populate_by_name=True)
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login(
     login_data: Optional[LoginRequest] = Body(None),
@@ -228,6 +240,57 @@ async def update_profile_me(
     db.commit()
     db.refresh(current_user)
     logger.info(f"User {current_user.tg_id} profile updated via /me endpoint")
+    return UserResponse.model_validate(current_user)
+
+
+@router.post("/update-role", response_model=UserResponse)
+async def update_role(
+    role_data: UpdateRoleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Обновить роль пользователя и опционально данные профиля.
+    
+    Используется для смены роли с student на teacher или наоборот.
+    При смене роли можно также обновить данные профиля (имя, фамилия, отчество, дата рождения, часовой пояс).
+    
+    Важно: при смене роли на teacher, пользователь должен заполнить обязательные поля (firstName, lastName).
+    """
+    # Обновляем роль
+    current_user.role = role_data.role
+    
+    # Обновляем данные профиля, если они переданы
+    if role_data.firstName:
+        current_user.first_name = role_data.firstName
+    if role_data.lastName:
+        current_user.last_name = role_data.lastName
+    if role_data.patronymic is not None:
+        current_user.patronymic = role_data.patronymic
+    if role_data.birthdate is not None:
+        current_user.birthdate = role_data.birthdate
+    if role_data.timezone:
+        # Валидируем timezone перед сохранением
+        try:
+            import pytz
+            pytz.timezone(role_data.timezone)
+            current_user.timezone = role_data.timezone
+            logger.info(f"User {current_user.tg_id} updated timezone to {role_data.timezone}")
+        except pytz.exceptions.UnknownTimeZoneError:
+            logger.warning(f"Invalid timezone '{role_data.timezone}' provided by user {current_user.tg_id}, keeping current timezone")
+    
+    try:
+        db.commit()
+        db.refresh(current_user)
+        logger.info(f"User {current_user.tg_id} role updated to {role_data.role.value}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating user role: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user role"
+        )
+    
     return UserResponse.model_validate(current_user)
 
 

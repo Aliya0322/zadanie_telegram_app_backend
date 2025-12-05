@@ -120,7 +120,10 @@ class GroupStatusUpdate(BaseModel):
 
 class GroupResponseWithInvite(GroupResponse):
     """Расширенный ответ с ссылкой-приглашением."""
-    inviteLink: str = Field(alias="invite_link")
+    inviteLink: str
+
+    class Config:
+        populate_by_name = True
 
 
 # Homework schemas
