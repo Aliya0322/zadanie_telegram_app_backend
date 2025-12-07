@@ -167,6 +167,27 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
 
 
+@router.get("/users/by-telegram/{tg_id}", response_model=UserResponse)
+async def get_user_by_telegram_id(
+    tg_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Получить пользователя по Telegram ID.
+    
+    Доступно для аутентифицированных пользователей.
+    Полезно для получения данных студентов, когда известен их Telegram ID (например, из списка группы).
+    """
+    user = db.query(User).filter(User.tg_id == tg_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return UserResponse.model_validate(user)
+
+
 @router.put("/profile", response_model=UserResponse)
 async def update_profile(
     profile_data: UserUpdate,
