@@ -3,6 +3,7 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from database import SessionLocal
 from models import Homework, Group, GroupMember, User, Schedule, DayOfWeek
 from bot_notifier import send_homework_reminder, send_class_reminder
@@ -83,14 +84,13 @@ async def send_homework_reminder_job(homework_id: int, group_id: int):
 
 def schedule_class_reminders():
     """
-    Планирует проверку занятий на текущий день.
-    Запускается каждое утро.
+    Планирует напоминания о занятиях на сегодня и завтра.
+    Запускается каждый день в 00:01 UTC.
+    Для каждого занятия планируется напоминание за 1 час до начала.
     """
-    # Очищаем старые задачи напоминаний о классах (опционально)
-    # scheduler.remove_all_jobs() # Осторожно, удалит и домашки!
-    
-    today = datetime.now(timezone.utc).date()
-    day_name = calendar.day_name[today.weekday()].lower()
+    now_utc = datetime.now(timezone.utc)
+    today = now_utc.date()
+    tomorrow = today + timedelta(days=1)
     
     day_mapping = {
         'monday': DayOfWeek.MONDAY,
@@ -102,30 +102,47 @@ def schedule_class_reminders():
         'sunday': DayOfWeek.SUNDAY,
     }
     
-    today_day = day_mapping.get(day_name)
-    if not today_day:
-        return
-
+    today_day_name = calendar.day_name[today.weekday()].lower()
+    tomorrow_day_name = calendar.day_name[tomorrow.weekday()].lower()
+    
+    today_day = day_mapping.get(today_day_name)
+    tomorrow_day = day_mapping.get(tomorrow_day_name)
+    
     db: Session = SessionLocal()
     try:
-        # Находим все занятия на сегодня только для активных групп с расписанием
+        # Находим все занятия на сегодня и завтра для активных групп с расписанием
+        day_filters = []
+        if today_day:
+            day_filters.append(Schedule.day_of_week == today_day)
+        if tomorrow_day:
+            day_filters.append(Schedule.day_of_week == tomorrow_day)
+        
+        if not day_filters:
+            return
+        
         schedules = db.query(Schedule).join(Group).filter(
-            Schedule.day_of_week == today_day,
+            or_(*day_filters),
             Schedule.meeting_link.isnot(None),  # Только если есть ссылка
             Group.is_active == True  # Только для активных групп
         ).all()
         
         for item in schedules:
-            # Вычисляем время напоминания (за 1 час до начала)
-            # item.time_at - это время дня. Нужно создать datetime на сегодня.
-            # Предполагаем, что time_at хранится в UTC
+            # Определяем, на какой день приходится это занятие
+            if item.day_of_week == today_day:
+                target_date = today
+            elif item.day_of_week == tomorrow_day:
+                target_date = tomorrow
+            else:
+                continue  # Пропускаем, если не сегодня и не завтра
             
-            class_time_utc = datetime.combine(today, item.time_at).replace(tzinfo=timezone.utc)
+            # Вычисляем время начала занятия
+            class_time_utc = datetime.combine(target_date, item.time_at).replace(tzinfo=timezone.utc)
+            # Время напоминания - за 1 час до начала занятия
             reminder_time = class_time_utc - timedelta(hours=1)
             
-            # Если время напоминания в будущем
-            if reminder_time > datetime.now(timezone.utc):
-                job_id = f"class_reminder_{item.id}_{today}"
+            # Планируем напоминание только если время еще не прошло
+            if reminder_time > now_utc:
+                job_id = f"class_reminder_{item.id}_{target_date}"
                 
                 scheduler.add_job(
                     send_class_reminder_job,
