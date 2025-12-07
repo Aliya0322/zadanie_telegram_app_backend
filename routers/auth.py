@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, status, Body
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User, UserRole
+from models import User, UserRole, Group, Homework
 from schemas import UserResponse, LoginResponse, UserUpdate
 from dependencies import get_current_user
 from telegram_auth import verify_telegram_init_data
+from scheduler import cancel_homework_reminder
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -325,15 +327,33 @@ async def delete_user(
     Внимание: это удалит все связанные данные (группы, домашние задания и т.д.)
     в соответствии с настройками каскадного удаления в БД.
     """
+    user_tg_id = current_user.tg_id
+    user_id = current_user.id
+    
     try:
+        # Отменяем все запланированные напоминания о домашних заданиях для групп пользователя
+        # Получаем все группы, где пользователь является учителем
+        teacher_groups = db.query(Group).filter(Group.teacher_id == user_id).all()
+        
+        # Отменяем напоминания для всех домашних заданий в группах учителя
+        for group in teacher_groups:
+            homeworks = db.query(Homework).filter(Homework.group_id == group.id).all()
+            for homework in homeworks:
+                try:
+                    cancel_homework_reminder(homework.id)
+                except Exception as reminder_error:
+                    logger.warning(f"Failed to cancel reminder for homework {homework.id}: {reminder_error}")
+        
+        # Удаляем пользователя
         db.delete(current_user)
         db.commit()
-        logger.info(f"User {current_user.tg_id} deleted from database")
+        logger.info(f"User {user_tg_id} (ID: {user_id}) deleted from database")
     except Exception as e:
         db.rollback()
-        logger.error(f"Error deleting user {current_user.tg_id}: {e}")
+        error_traceback = traceback.format_exc()
+        logger.error(f"Error deleting user {user_tg_id} (ID: {user_id}): {e}\n{error_traceback}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete user account"
+            detail=f"Failed to delete user account: {str(e)}"
         )
 

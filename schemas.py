@@ -103,6 +103,19 @@ class GroupResponse(GroupBase):
     class Config:
         from_attributes = True
         populate_by_name = True
+    
+    @model_serializer
+    def ser_model(self):
+        # Сериализуем с именами полей (camelCase), а не alias'ами
+        return {
+            "id": self.id,
+            "name": self.name,
+            "teacherId": self.teacherId,
+            "inviteCode": self.inviteCode,
+            "isActive": self.isActive,
+            "createdAt": self.createdAt.isoformat() if isinstance(self.createdAt, datetime) else self.createdAt,
+            "students": self.students
+        }
 
 
 class GroupUpdate(BaseModel):
@@ -124,6 +137,13 @@ class GroupResponseWithInvite(GroupResponse):
 
     class Config:
         populate_by_name = True
+    
+    @model_serializer
+    def ser_model(self):
+        # Получаем базовые поля от родителя и добавляем inviteLink
+        base_dict = super().ser_model()
+        base_dict["inviteLink"] = self.inviteLink
+        return base_dict
 
 
 # Homework schemas
