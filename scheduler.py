@@ -108,10 +108,11 @@ def schedule_class_reminders():
 
     db: Session = SessionLocal()
     try:
-        # Находим все занятия на сегодня
-        schedules = db.query(Schedule).filter(
+        # Находим все занятия на сегодня только для активных групп с расписанием
+        schedules = db.query(Schedule).join(Group).filter(
             Schedule.day_of_week == today_day,
-            Schedule.meeting_link.isnot(None) # Только если есть ссылка
+            Schedule.meeting_link.isnot(None),  # Только если есть ссылка
+            Group.is_active == True  # Только для активных групп
         ).all()
         
         for item in schedules:
